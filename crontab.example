@@ -1,0 +1,2 @@
+# 毎日午前7時00分に personalized-news-agent を実行し、ログを保存する
+0 7 * * * cd /home/ユーザー名/personalized-news-agent && /usr/bin/python3 personalized-news-agent.py >> /home/ユーザー名/personalized-news-agent/cron.log 2>&1
