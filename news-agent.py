@@ -43,7 +43,7 @@ def get_real_url(google_news_url):
         )
         return response.url
     except Exception as e:
-        print(f"⚠️ URL転送追跡失敗: {e}")
+        print(f"Error: Failed to get real URL {e}")
         return google_news_url
 
 
