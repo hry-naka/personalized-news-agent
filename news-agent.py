@@ -29,6 +29,40 @@ NUM_OUTPUT_ARTICLES = "10〜20"  # number of articles Gemini will curate and out
 NUM_OUTPUT_TREND = 5  # number of lines for dynamic trend analysis
 
 
+def create_main_prompt(articles_text):
+    return f"""
+以下の【ユーザープロファイル】を厳密に読み解き、提供された【ニュース記事候補リスト】の中から、
+彼の知的好奇心や関心に最も合致する記事を【{NUM_OUTPUT_ARTICLES}件程度】、厳選してください。
+
+【ユーザープロファイル】
+{USER_PROFILE_BASE}
+
+【ニュース記事候補リスト】
+{articles_text}
+
+【出力フォーマット・極めて重要な指示】
+厳選した記事について、必ず以下の【HTML形式】のみで出力してください。Markdown（# や - など）は一切使用しないでください。
+URLには、提供されたリストにある本物のURL（httpから始まるURL）をそのままaタグのhref属性に埋め込んでください。
+
+以下の記述パターンを正確にトレースして出力してください。
+▪ <a href="URL" target="_blank" style="font-weight: bold; text-decoration: underline;">記事のタイトル</a><br>
+<br>
+【選定理由】 [なぜこのユーザーに選んだのかの理由を1文で記述]<br>
+<br>
+【記事の要約】 [アナリスト視点による、記事の本質を突いた深い要約を2〜3文で記述]<br>
+<hr style="border: 0; border-top: 1px solid #555; margin: 20px 0;">
+
+【カウンター・ビュー（あえて真逆の視点）の選定】
+厳選する記事のうち、1〜2本程度は「ユーザーの基本プロファイル（思想や好み）」に対する【カウンター・ビュー】となる記事をあえて選定してください。
+
+目的: ユーザーの知的好奇心や多角的な批評精神を刺激するため。
+選定基準: ユーザーの関心領域（テクノロジー、社会構造、カルチャーなど）に関連しつつも、あえて異なるアプローチ、逆の思想、または異論を唱えている
+「質の高い論考やニュース」を厳選すること。
+出力時の注意: カウンター・ビューとして選んだ記事には、全文の最後に出力し、タイトルの前や要約の冒頭に 【カウンター・ビュー】 と明記し、
+なぜこの視点がユーザーにとって知的な刺激になるのかが分かるように要約してください。
+"""
+
+
 # retrieve real URLs from Google News RSS
 def get_real_url(google_news_url):
     headers = {
@@ -138,31 +172,11 @@ def main():
 
     # 3. Gemini 2.5 SDK を用いた呼び出し
 
-    main_prompt = f"""以下の【ユーザープロファイル】を厳密に読み解き、提供された【ニュース記事候補リスト】の中から、彼の知的好奇心や関心に最も合致する記事を【{NUM_OUTPUT_ARTICLES}件程度】、厳選してください。
-
-【ユーザープロファイル】
-{USER_PROFILE_BASE}
-
-【ニュース記事候補リスト】
-{articles_text}
-
-【出力フォーマット・極めて重要な指示】
-厳選した記事について、必ず以下の【HTML形式】のみで出力してください。Markdown（# や - など）は一切使用しないでください。
-URLには、提供されたリストにある本物のURL（httpから始まるURL）をそのままaタグのhref属性に埋め込んでください。
-
-以下の記述パターンを正確にトレースして出力してください。
-▪ <a href="URL" target="_blank" style="font-weight: bold; text-decoration: underline;">記事のタイトル</a><br>
-<br>
-【選定理由】 [なぜこのユーザーに選んだのかの理由を1文で記述]<br>
-<br>
-【記事の要約】 [アナリスト視点による、記事の本質を突いた深い要約を2〜3文で記述]<br>
-<hr style="border: 0; border-top: 1px solid #555; margin: 20px 0;">"""
-
     print("Analyzing and curating articles with Gemini 2.5...")
     try:
         response = client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=main_prompt,
+            contents=create_main_prompt(articles_text),
         )
     except Exception as e:
         print(f"Error: fail to curate articles: {e}")
