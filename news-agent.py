@@ -68,7 +68,7 @@ def fetch_news_from_rss(search_query, max_count):
             title = parts[0].strip()
             source = parts[1].strip()
 
-        print(f"analyzing: {title[:20]}...")
+        print(f"Unveiling URL for: {title[:20]}...")
         real_url = get_real_url(encrypted_url)
 
         articles.append({"title": title, "source": source, "url": real_url})
@@ -94,10 +94,11 @@ def main():
     # 🚀 1. チャットの文脈から「最近のトレンド」を動的生成
     # ------------------------------------------
     dynamic_trend = "特になし"
+    client = genai.Client(api_key=GEMINI_API_KEY)
     try:
         trend_prompt = f"""あなたはユーザーの対話履歴を把握している優れたアナリストです。
 これまでのユーザーとの会話の全体の流れを振り返り、
-「彼が最近特に強い関心を持っているテーマ、知的な関心の変遷、または直近の時事的なトピック」を、ニュース選定の補助にするために【箇取りで {NUM_OUTPUT_TREND} 行程度】で簡潔に抽出してください。
+「彼が最近特に強い関心を持っているテーマ、知的な関心の変遷、または直近の時事的なトピック」を、ニュース選定の補助にするために箇条書きで {NUM_OUTPUT_TREND} 行程度】で簡潔に抽出してください。
 余計な解説は省き、箇条書きのテキストだけを出力してください。"""
         print("Analyzing recent trends from chat context...")
         trend_response = client.models.generate_content(
@@ -135,7 +136,6 @@ def main():
         articles_text += "---------------------\n"
 
     # 3. Gemini 2.5 SDK を用いた呼び出し
-    client = genai.Client(api_key=GEMINI_API_KEY)
 
     main_prompt = f"""以下の【ユーザープロファイル】を厳密に読み解き、提供された【ニュース記事候補リスト】の中から、彼の知的好奇心や関心に最も合致する記事を【{NUM_OUTPUT_ARTICLES}件程度】、厳選してください。
 
