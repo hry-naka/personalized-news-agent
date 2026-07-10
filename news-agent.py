@@ -55,26 +55,30 @@ def fetch_news_from_rss(search_query, max_count):
     )
 
     print(f"Getting RSS news for: {search_query} ...")
-    feed = feedparser.parse(rss_url)
-    articles = []
+    try:
+        feed = feedparser.parse(rss_url)
+        articles = []
 
-    for entry in feed.entries[:max_count]:
-        full_title = entry.title
-        encrypted_url = entry.link
+        for entry in feed.entries[:max_count]:
+            full_title = entry.title
+            encrypted_url = entry.link
 
-        title = full_title
-        source = "unknown"
-        if " - " in full_title:
-            parts = full_title.rsplit(" - ", 1)
-            title = parts[0].strip()
-            source = parts[1].strip()
+            title = full_title
+            source = "unknown"
+            if " - " in full_title:
+                parts = full_title.rsplit(" - ", 1)
+                title = parts[0].strip()
+                source = parts[1].strip()
 
-        # print(f"Unveiling URL for: {title[:20]}...")
-        real_url = get_real_url(encrypted_url)
+            # print(f"Unveiling URL for: {title[:20]}...")
+            real_url = get_real_url(encrypted_url)
 
-        articles.append({"title": title, "source": source, "url": real_url})
+            articles.append({"title": title, "source": source, "url": real_url})
 
-    return articles
+        return articles
+    except Exception as e:
+        print(f"Error: failed to parse RSS feed for {search_query}: {e}")
+        return []
 
 
 def get_args() -> argparse.Namespace:
@@ -109,24 +113,6 @@ def main():
     # create trend analysis from chat context
     dynamic_trend = "特になし"
     client = genai.Client(api_key=GEMINI_API_KEY)
-    try:
-        trend_prompt = f"""あなたはユーザーの対話履歴を把握している優れたアナリストです。
-これまでのユーザーとの会話の全体の流れを振り返り、
-「彼が最近特に強い関心を持っているテーマ、知的な関心の変遷、または直近の時事的なトピック」を、ニュース選定の補助にするために箇条書きで {NUM_OUTPUT_TREND} 行程度】で簡潔に抽出してください。
-余計な解説は省き、箇条書きのテキストだけを出力してください。"""
-        print("Analyzing recent trends from chat context...")
-        trend_response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=trend_prompt,
-        )
-        if trend_response.text:
-            dynamic_trend = trend_response.text.strip()
-            print(f"Dynamic trend analysis result:\n{dynamic_trend}")
-    except Exception as e:
-        print(f"Error: fail to analyze dynamic trend: {e}")
-
-    # 普遍的プロファイルと動的トレンドを合流させる
-    final_profile = f"【普遍的な基本プロファイル】\n{USER_PROFILE_BASE}\n\n【AIが分析した直近の関心・対話の変遷トレンド】\n{dynamic_trend}"
 
     # get from RSS feeds
     nikkei_articles = fetch_news_from_rss("日本経済新聞", NUM_FETCH_ARTICLES)
@@ -155,7 +141,7 @@ def main():
     main_prompt = f"""以下の【ユーザープロファイル】を厳密に読み解き、提供された【ニュース記事候補リスト】の中から、彼の知的好奇心や関心に最も合致する記事を【{NUM_OUTPUT_ARTICLES}件程度】、厳選してください。
 
 【ユーザープロファイル】
-{final_profile}
+{USER_PROFILE_BASE}
 
 【ニュース記事候補リスト】
 {articles_text}
@@ -173,10 +159,14 @@ URLには、提供されたリストにある本物のURL（httpから始まるU
 <hr style="border: 0; border-top: 1px solid #555; margin: 20px 0;">"""
 
     print("Analyzing and curating articles with Gemini 2.5...")
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=main_prompt,
-    )
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=main_prompt,
+        )
+    except Exception as e:
+        print(f"Error: fail to curate articles: {e}")
+        return
 
     report_content = response.text
 
