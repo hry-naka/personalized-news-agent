@@ -1,4 +1,5 @@
 import os
+import argparse
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -68,7 +69,7 @@ def fetch_news_from_rss(search_query, max_count):
             title = parts[0].strip()
             source = parts[1].strip()
 
-        print(f"Unveiling URL for: {title[:20]}...")
+        # print(f"Unveiling URL for: {title[:20]}...")
         real_url = get_real_url(encrypted_url)
 
         articles.append({"title": title, "source": source, "url": real_url})
@@ -76,9 +77,23 @@ def fetch_news_from_rss(search_query, max_count):
     return articles
 
 
+def get_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="news curation AI-agent.")
+    parser.add_argument(
+        "MailSubjectString",
+        metavar="mail_subject_string",
+        type=str,
+        help="Subject string for the email report",
+    )
+    return parser.parse_args()
+
+
 # main
 def main():
-    # 必須の環境変数が揃っているかチェック
+    # check required environment variables
+    args = get_args()
+
     if (
         not GEMINI_API_KEY
         or not SMTP_USER
@@ -90,9 +105,8 @@ def main():
             "Error: not found .env file with required settings (API keys, passwords, etc.)."
         )
         return
-    # ------------------------------------------
-    # 🚀 1. チャットの文脈から「最近のトレンド」を動的生成
-    # ------------------------------------------
+
+    # create trend analysis from chat context
     dynamic_trend = "特になし"
     client = genai.Client(api_key=GEMINI_API_KEY)
     try:
@@ -107,6 +121,7 @@ def main():
         )
         if trend_response.text:
             dynamic_trend = trend_response.text.strip()
+            print(f"Dynamic trend analysis result:\n{dynamic_trend}")
     except Exception as e:
         print(f"Error: fail to analyze dynamic trend: {e}")
 
@@ -168,7 +183,7 @@ URLには、提供されたリストにある本物のURL（httpから始まるU
     # send mail via smtplib
     print("trying to send email...")
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "【AI Agent】Morning Insight Report"
+    msg["Subject"] = f"【AI news Agent】: {args.MailSubjectString} insights report"
     msg["From"] = SMTP_USER
     msg["To"] = TO_EMAIL
 
@@ -180,9 +195,9 @@ URLには、提供されたリストにある本物のURL（httpから始まるU
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
             server.sendmail(SMTP_USER, TO_EMAIL, msg.as_string())
-        print(f"🎉 Email sent successfully! Recipient: {TO_EMAIL}")
+        print(f"Email sent successfully! Recipient: {TO_EMAIL}")
     except Exception as e:
-        print(f"❌ Error sending email: {e}")
+        print(f"Error sending email: {e}")
 
 
 if __name__ == "__main__":
