@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import json
 import argparse
 import smtplib
@@ -8,6 +9,7 @@ from email.mime.text import MIMEText
 import urllib.parse
 import feedparser
 import requests
+from datetime import datetime as DT
 from google import genai
 from dotenv import load_dotenv
 
@@ -32,13 +34,22 @@ PROMPT_PATH = "main_prompt.txt"
 def load_external_files():
     """Load config, profile, and prompt from external files."""
     if not os.path.exists(CONFIG_PATH):
-        print(f"Error: Required file '{CONFIG_PATH}' not found.")
+        print(
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+            f"Error: Required file '{CONFIG_PATH}' not found."
+        )
         sys.exit(1)
     if not os.path.exists(PROFILE_PATH):
-        print(f"Error: Required file '{PROFILE_PATH}' not found.")
+        print(
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+            f"Error: Required file '{PROFILE_PATH}' not found."
+        )
         sys.exit(1)
     if not os.path.exists(PROMPT_PATH):
-        print(f"Error: Required file '{PROMPT_PATH}' not found.")
+        print(
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+            f"Error: Required file '{PROMPT_PATH}' not found."
+        )
         sys.exit(1)
 
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -68,7 +79,10 @@ def get_real_url(google_news_url):
         )
         return response.url
     except Exception as e:
-        print(f"WARNING: Failed to get real URL, fallback to original: {e}")
+        print(
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+            f"WARNING: Failed to get real URL, fallback to original: {e}"
+        )
         return google_news_url
 
 
@@ -78,7 +92,10 @@ def fetch_news_from_rss(search_query, max_count):
     rss_url = (
         f"https://news.google.com/rss/search?q={encoded_query}&hl=ja&gl=JP&ceid=JP:ja"
     )
-    print(f"INFO: Fetching RSS news for query: '{search_query}' (Max: {max_count})...")
+    print(
+        f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+        f"INFO: Fetching RSS news for query: '{search_query}' (Max: {max_count})..."
+    )
 
     try:
         feed = feedparser.parse(rss_url)
@@ -95,10 +112,14 @@ def fetch_news_from_rss(search_query, max_count):
                 source = parts[1].strip()
 
             real_url = get_real_url(encrypted_url)
+            time.sleep(0.3)  # To avoid overwhelming the server
             articles.append({"title": title, "source": source, "url": real_url})
         return articles
     except Exception as e:
-        print(f"ERROR: Failed to parse RSS feed for '{search_query}': {e}")
+        print(
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+            f"ERROR: Failed to parse RSS feed for '{search_query}': {e}"
+        )
         return []
 
 
@@ -120,17 +141,24 @@ def main():
     # 1. Check core environment variables
     if not GEMINI_API_KEY or not SMTP_USER or not SMTP_PASS or not TO_EMAIL:
         print(
-            "ERROR: Missing required settings in .env (API keys, SMTP credentials, etc.)."
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+            f"ERROR: Missing required settings in .env (API keys, SMTP credentials, etc.)."
         )
         return
 
     # 2. Load external settings and assets
-    print("INFO: Loading configuration and asset files...")
+    print(
+        f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+        f"INFO: Loading configuration and asset files..."
+    )
     config_data, user_profile, prompt_template = load_external_files()
 
     rss_channels = config_data.get("rss_channels", [])
     if not rss_channels:
-        print("ERROR: No RSS channels defined in config.json.")
+        print(
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+            f"ERROR: No RSS channels defined in config.json."
+        )
         return
 
     # 3. Dynamic RSS Looping based on config
@@ -144,11 +172,15 @@ def main():
 
     if not all_articles:
         print(
-            "ERROR: Could not fetch any articles from RSS channels. Check network or configuration."
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+            f"ERROR: Could not fetch any articles from RSS channels. Check network or configuration."
         )
         return
 
-    print(f"SUCCESS: Fetched total {len(all_articles)} articles from RSS.")
+    print(
+        f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+        f"SUCCESS: Fetched total {len(all_articles)} articles from RSS."
+    )
 
     # 4. Format articles into plain text for Gemini
     articles_text = ""
@@ -159,10 +191,14 @@ def main():
         articles_text += f"URL: {article['url']}\n"
         articles_text += "---------------------\n"
 
-    # 5. Construct Main Prompt dynamically
-    # Replaces placeholders safely without string conflict issues
-    final_prompt = prompt_template.replace("{user_profile}", user_profile).replace(
-        "{articles_text}", articles_text
+    # get the number of articles to output from config.json (default is 5)
+    num_output_articles = config_data.get("num_output_articles", 5)
+
+    # 5. Construct Main Prompt
+    final_prompt = (
+        prompt_template.replace("{user_profile}", user_profile)
+        .replace("{articles_text}", articles_text)
+        .replace("{num_output_articles}", str(num_output_articles))
     )
 
     # 6. Call Gemini 2.5 API
@@ -175,11 +211,17 @@ def main():
         )
         report_content = response.text
     except Exception as e:
-        print(f"ERROR: Gemini API execution failed: {e}")
+        print(
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+            f"ERROR: Gemini API execution failed: {e}"
+        )
         return
 
     # 7. Send Curated Report Email
-    print("INFO: Preparing and sending email...")
+    print(
+        f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+        f"INFO: Preparing and sending email..."
+    )
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"【AI news Agent】: {args.MailSubjectString} insights report"
     msg["From"] = SMTP_USER
@@ -193,9 +235,15 @@ def main():
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
             server.sendmail(SMTP_USER, TO_EMAIL, msg.as_string())
-        print(f"SUCCESS: Email sent successfully to {TO_EMAIL}")
+        print(
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+            f"SUCCESS: Email sent successfully to {TO_EMAIL}"
+        )
     except Exception as e:
-        print(f"ERROR: SMTP email transmission failed: {e}")
+        print(
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+            f"ERROR: SMTP email transmission failed: {e}"
+        )
 
 
 if __name__ == "__main__":

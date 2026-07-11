@@ -1,4 +1,5 @@
 {
+    "num_output_articles": "10~20",
     "rss_channels": [
         {
             "query": "日本経済新聞",
