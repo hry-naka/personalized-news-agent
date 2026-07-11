@@ -1,0 +1,16 @@
+{
+    "rss_channels": [
+        {
+            "query": "日本経済新聞",
+            "count": 50
+        },
+        {
+            "query": "ニュース",
+            "count": 30
+        },
+        {
+            "query": "アート",
+            "count": 20
+        }
+    ]
+}

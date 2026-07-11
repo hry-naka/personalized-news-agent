@@ -11,7 +11,7 @@ A simple Python script that collects news articles from Google News RSS feeds, c
 
 ## Requirements
 
-- Python 3.9 or higher
+- Python 3.12.2 or higher
 - An SMTP server for sending email
 - A Gemini API key
 

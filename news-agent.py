@@ -1,4 +1,6 @@
 import os
+import sys
+import json
 import argparse
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -7,64 +9,52 @@ import urllib.parse
 import feedparser
 import requests
 from google import genai
-from google.genai import types
 from dotenv import load_dotenv
 
-# load .env file
+# Load environment variables
 load_dotenv()
 
-# load environment variables
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 TO_EMAIL = os.environ.get("TO_EMAIL")
 
-# smtp server settings
+# SMTP server settings
 SMTP_SERVER = os.environ.get("SMTP_SERVER", "127.0.0.1")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
 SMTP_USER = os.environ.get("SMTP_USER")
 SMTP_PASS = os.environ.get("SMTP_PASS")
-USER_PROFILE_BASE = os.environ.get("USER_PROFILE_BASE")
 
-NUM_FETCH_ARTICLES = 50  # max number of rss articles to fetch per keyword
-NUM_OUTPUT_ARTICLES = "10〜20"  # number of articles Gemini will curate and output
-NUM_OUTPUT_TREND = 5  # number of lines for dynamic trend analysis
-
-
-def create_main_prompt(articles_text):
-    return f"""
-以下の【ユーザープロファイル】を厳密に読み解き、提供された【ニュース記事候補リスト】の中から、
-彼の知的好奇心や関心に最も合致する記事を【{NUM_OUTPUT_ARTICLES}件程度】、厳選してください。
-
-【ユーザープロファイル】
-{USER_PROFILE_BASE}
-
-【ニュース記事候補リスト】
-{articles_text}
-
-【出力フォーマット・極めて重要な指示】
-厳選した記事について、必ず以下の【HTML形式】のみで出力してください。Markdown（# や - など）は一切使用しないでください。
-URLには、提供されたリストにある本物のURL（httpから始まるURL）をそのままaタグのhref属性に埋め込んでください。
-
-以下の記述パターンを正確にトレースして出力してください。
-▪ <a href="URL" target="_blank" style="font-weight: bold; text-decoration: underline;">記事のタイトル</a><br>
-<br>
-【選定理由】 [なぜこのユーザーに選んだのかの理由を1文で記述]<br>
-<br>
-【記事の要約】 [アナリスト視点による、記事の本質を突いた深い要約を2〜3文で記述]<br>
-<hr style="border: 0; border-top: 1px solid #555; margin: 20px 0;">
-
-【カウンター・ビュー（あえて真逆の視点）の選定】
-厳選する記事のうち、1〜2本程度は「ユーザーの基本プロファイル（思想や好み）」に対する【カウンター・ビュー】となる記事をあえて選定してください。
-
-目的: ユーザーの知的好奇心や多角的な批評精神を刺激するため。
-選定基準: ユーザーの関心領域（テクノロジー、社会構造、カルチャーなど）に関連しつつも、あえて異なるアプローチ、逆の思想、または異論を唱えている
-「質の高い論考やニュース」を厳選すること。
-出力時の注意: カウンター・ビューとして選んだ記事には、全文の最後に出力し、タイトルの前や要約の冒頭に 【カウンター・ビュー】 と明記し、
-なぜこの視点がユーザーにとって知的な刺激になるのかが分かるように要約してください。
-"""
+# File path constants
+CONFIG_PATH = "config.json"
+PROFILE_PATH = "user_profile.txt"
+PROMPT_PATH = "main_prompt.txt"
 
 
-# retrieve real URLs from Google News RSS
+def load_external_files():
+    """Load config, profile, and prompt from external files."""
+    if not os.path.exists(CONFIG_PATH):
+        print(f"Error: Required file '{CONFIG_PATH}' not found.")
+        sys.exit(1)
+    if not os.path.exists(PROFILE_PATH):
+        print(f"Error: Required file '{PROFILE_PATH}' not found.")
+        sys.exit(1)
+    if not os.path.exists(PROMPT_PATH):
+        print(f"Error: Required file '{PROMPT_PATH}' not found.")
+        sys.exit(1)
+
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        config_data = json.load(f)
+
+    with open(PROFILE_PATH, "r", encoding="utf-8") as f:
+        user_profile = f.read()
+
+    with open(PROMPT_PATH, "r", encoding="utf-8") as f:
+        prompt_template = f.read()
+
+    return config_data, user_profile, prompt_template
+
+
 def get_real_url(google_news_url):
+    """Retrieve real URLs from Google News RSS."""
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
@@ -78,46 +68,43 @@ def get_real_url(google_news_url):
         )
         return response.url
     except Exception as e:
-        print(f"Error: Failed to get real URL {e}")
+        print(f"WARNING: Failed to get real URL, fallback to original: {e}")
         return google_news_url
 
 
 def fetch_news_from_rss(search_query, max_count):
+    """Fetch and parse articles from Google News RSS based on query."""
     encoded_query = urllib.parse.quote(search_query)
     rss_url = (
         f"https://news.google.com/rss/search?q={encoded_query}&hl=ja&gl=JP&ceid=JP:ja"
     )
+    print(f"INFO: Fetching RSS news for query: '{search_query}' (Max: {max_count})...")
 
-    print(f"Getting RSS news for: {search_query} ...")
     try:
         feed = feedparser.parse(rss_url)
         articles = []
-
         for entry in feed.entries[:max_count]:
             full_title = entry.title
             encrypted_url = entry.link
-
             title = full_title
             source = "unknown"
+
             if " - " in full_title:
                 parts = full_title.rsplit(" - ", 1)
                 title = parts[0].strip()
                 source = parts[1].strip()
 
-            # print(f"Unveiling URL for: {title[:20]}...")
             real_url = get_real_url(encrypted_url)
-
             articles.append({"title": title, "source": source, "url": real_url})
-
         return articles
     except Exception as e:
-        print(f"Error: failed to parse RSS feed for {search_query}: {e}")
+        print(f"ERROR: Failed to parse RSS feed for '{search_query}': {e}")
         return []
 
 
 def get_args() -> argparse.Namespace:
     """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="news curation AI-agent.")
+    parser = argparse.ArgumentParser(description="News curation AI-agent.")
     parser.add_argument(
         "MailSubjectString",
         metavar="mail_subject_string",
@@ -127,65 +114,72 @@ def get_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# main
 def main():
-    # check required environment variables
     args = get_args()
 
-    if (
-        not GEMINI_API_KEY
-        or not SMTP_USER
-        or not SMTP_PASS
-        or not TO_EMAIL
-        or not USER_PROFILE_BASE
-    ):
+    # 1. Check core environment variables
+    if not GEMINI_API_KEY or not SMTP_USER or not SMTP_PASS or not TO_EMAIL:
         print(
-            "Error: not found .env file with required settings (API keys, passwords, etc.)."
+            "ERROR: Missing required settings in .env (API keys, SMTP credentials, etc.)."
         )
         return
 
-    # create trend analysis from chat context
-    dynamic_trend = "特になし"
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    # 2. Load external settings and assets
+    print("INFO: Loading configuration and asset files...")
+    config_data, user_profile, prompt_template = load_external_files()
 
-    # get from RSS feeds
-    nikkei_articles = fetch_news_from_rss("日本経済新聞", NUM_FETCH_ARTICLES)
-    trend_articles = fetch_news_from_rss("ニュース", NUM_FETCH_ARTICLES)
-    all_articles = nikkei_articles + trend_articles
+    rss_channels = config_data.get("rss_channels", [])
+    if not rss_channels:
+        print("ERROR: No RSS channels defined in config.json.")
+        return
+
+    # 3. Dynamic RSS Looping based on config
+    all_articles = []
+    for channel in rss_channels:
+        query = channel.get("query")
+        count = channel.get("count", 30)
+        if query:
+            articles = fetch_news_from_rss(query, count)
+            all_articles.extend(articles)
 
     if not all_articles:
         print(
-            "Error: could not fetch any articles from RSS feeds. Please check your network connection or the RSS feed URLs."
+            "ERROR: Could not fetch any articles from RSS channels. Check network or configuration."
         )
         return
 
-    print(f"Get total: {len(all_articles)} articles from RSS feeds.")
+    print(f"SUCCESS: Fetched total {len(all_articles)} articles from RSS.")
 
-    # create prompt text for Gemini 2.5 SDK
+    # 4. Format articles into plain text for Gemini
     articles_text = ""
     for i, article in enumerate(all_articles, 1):
-        articles_text += f"\n[記事No.{i}]\n"
-        articles_text += f"タイトル: {article['title']}\n"
-        articles_text += f"メディア: {article['source']}\n"
+        articles_text += f"\n[Article No.{i}]\n"
+        articles_text += f"Title: {article['title']}\n"
+        articles_text += f"Source: {article['source']}\n"
         articles_text += f"URL: {article['url']}\n"
         articles_text += "---------------------\n"
 
-    # 3. Gemini 2.5 SDK を用いた呼び出し
+    # 5. Construct Main Prompt dynamically
+    # Replaces placeholders safely without string conflict issues
+    final_prompt = prompt_template.replace("{user_profile}", user_profile).replace(
+        "{articles_text}", articles_text
+    )
 
-    print("Analyzing and curating articles with Gemini 2.5...")
+    # 6. Call Gemini 2.5 API
+    print("INFO: Analyzing and curating articles with Gemini 2.5...")
     try:
+        client = genai.Client(api_key=GEMINI_API_KEY)
         response = client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=create_main_prompt(articles_text),
+            contents=final_prompt,
         )
+        report_content = response.text
     except Exception as e:
-        print(f"Error: fail to curate articles: {e}")
+        print(f"ERROR: Gemini API execution failed: {e}")
         return
 
-    report_content = response.text
-
-    # send mail via smtplib
-    print("trying to send email...")
+    # 7. Send Curated Report Email
+    print("INFO: Preparing and sending email...")
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"【AI news Agent】: {args.MailSubjectString} insights report"
     msg["From"] = SMTP_USER
@@ -199,9 +193,9 @@ def main():
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
             server.sendmail(SMTP_USER, TO_EMAIL, msg.as_string())
-        print(f"Email sent successfully! Recipient: {TO_EMAIL}")
+        print(f"SUCCESS: Email sent successfully to {TO_EMAIL}")
     except Exception as e:
-        print(f"Error sending email: {e}")
+        print(f"ERROR: SMTP email transmission failed: {e}")
 
 
 if __name__ == "__main__":
