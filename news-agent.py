@@ -64,14 +64,14 @@ def load_external_files():
     return config_data, user_profile, prompt_template
 
 
-def get_real_url(google_news_url):
-    """Retrieve real URLs from Google News RSS."""
+def get_real_url(news_url):
+    """Retrieve real URLs from News RSS."""
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     try:
         response = requests.get(
-            google_news_url,
+            news_url,
             headers=headers,
             timeout=5,
             allow_redirects=True,
@@ -83,15 +83,13 @@ def get_real_url(google_news_url):
             f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
             f"WARNING: Failed to get real URL, fallback to original: {e}"
         )
-        return google_news_url
+        return news_url
 
 
 def fetch_news_from_rss(search_query, max_count):
-    """Fetch and parse articles from Google News RSS based on query."""
+    """Fetch and parse articles from Bing News RSS based on query."""
     encoded_query = urllib.parse.quote(search_query)
-    rss_url = (
-        f"https://news.google.com/rss/search?q={encoded_query}&hl=ja&gl=JP&ceid=JP:ja"
-    )
+    rss_url = f"https://www.bing.com/news/search?q={encoded_query}&format=rss"
     print(
         f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
         f"INFO: Fetching RSS news for query: '{search_query}' (Max: {max_count})..."
