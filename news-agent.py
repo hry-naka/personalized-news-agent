@@ -130,6 +130,11 @@ def get_args() -> argparse.Namespace:
         type=str,
         help="Subject string for the email report",
     )
+    parser.add_argument(
+        "--eval",
+        action="store_true",
+        help="Save evaluation data (prompt, html, articles, meta.json)",
+    )
     return parser.parse_args()
 
 
@@ -241,6 +246,41 @@ def main():
         print(
             f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
             f"ERROR: SMTP email transmission failed: {e}"
+        )
+
+    # 8. Save evaluation data if --eval is enabled
+    if args.eval:
+        timestamp = DT.now().strftime("%Y%m%d%H%M")
+        eval_dir = os.path.join("eval-data", timestamp)
+        os.makedirs(eval_dir, exist_ok=True)
+
+        # Save prompt
+        with open(os.path.join(eval_dir, "prompt.txt"), "w", encoding="utf-8") as f:
+            f.write(final_prompt)
+
+        # Save HTML report
+        with open(os.path.join(eval_dir, "report.html"), "w", encoding="utf-8") as f:
+            f.write(report_content)
+
+        # Save articles list
+        with open(os.path.join(eval_dir, "articles.json"), "w", encoding="utf-8") as f:
+            json.dump(all_articles, f, ensure_ascii=False, indent=2)
+
+        # Save meta.json
+        meta = {
+            "timestamp": timestamp,
+            "prompt_file": "prompt.txt",
+            "html_file": "report.html",
+            "articles_file": "articles.json",
+            "num_articles": len(all_articles),
+            "mail_subject": args.MailSubjectString,
+        }
+        with open(os.path.join(eval_dir, "meta.json"), "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+
+        print(
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+            f"INFO: Evaluation data saved to {eval_dir}"
         )
 
 
