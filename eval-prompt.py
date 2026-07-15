@@ -13,6 +13,12 @@ load_dotenv()
 EMBED_MODEL = "models/gemini-embedding-2"
 
 
+header = (
+    "timestamp,mail_subject,article_index,"
+    "title_score,summary_score,reason_score,article_score,"
+    "is_counter"
+)
+
 def load_meta(target_dir):
     """Load meta information from a JSON file."""
     meta_path = os.path.join(target_dir, "meta.json")
@@ -147,11 +153,6 @@ def eval_per_article(
     client, prompt_text, html_text, meta, output_path, header_only=False
 ):
     """Evaluate each article against the prompt and output scores."""
-    header = (
-        "timestamp,mail_subject,article_index,"
-        "title_score,summary_score,reason_score,article_score,"
-        "is_counter"
-    )
     if header_only:
         if output_path:
             write_header = not os.path.exists(output_path)
@@ -238,7 +239,6 @@ def eval_summary(
     client, prompt_text, html_text, articles_list, meta, output_path, header_only=False
 ):
     """Evaluate the overall summary against the prompt and output scores."""
-    header = "timestamp,mail_subject,article_index,main_view_score,counter_view_score"
 
     if header_only:
         if output_path:
@@ -262,9 +262,10 @@ def eval_summary(
 
     # article_index is set to '-' for summary evaluation
     row = (
-        f"{timestamp},{mail_subject},-,"
-        f"{main_view_score:.6f},{counter_view_score:.6f}"
+    f"{timestamp},{mail_subject},-,"
+    f",,,,{main_view_score:.6f},0"
     )
+
 
     if output_path:
         write_header = not os.path.exists(output_path)
