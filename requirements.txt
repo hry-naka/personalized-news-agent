@@ -1,5 +1,7 @@
 feedparser
 requests
+numpy
 google-genai
 python-dotenv
 argparse
+beautifulsoup4

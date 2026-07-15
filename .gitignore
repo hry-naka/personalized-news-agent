@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# This project specific ignores
+.DS_Store
+eval-data/
