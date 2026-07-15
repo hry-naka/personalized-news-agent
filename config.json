@@ -1,5 +1,5 @@
 {
-    "num_output_articles": "10~20",
+    "num_output_articles": "15~20",
     "rss_channels": [
         {
             "query": "日本経済新聞",
@@ -10,8 +10,16 @@
             "count": 30
         },
         {
+            "query": "転職",
+            "count": 10
+        },
+        {
+            "query": "音楽",
+            "count": 10
+        },
+        {
             "query": "アート",
-            "count": 20
+            "count": 10
         }
     ]
 }
