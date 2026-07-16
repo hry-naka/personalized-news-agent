@@ -110,7 +110,7 @@ def fetch_news_from_rss(search_query, max_count):
                 source = parts[1].strip()
 
             real_url = get_real_url(encrypted_url)
-            time.sleep(0.3)  # To avoid overwhelming the server
+            # time.sleep(0.3)  # To avoid overwhelming the server
             articles.append({"title": title, "source": source, "url": real_url})
         return articles
     except Exception as e:
@@ -136,6 +136,129 @@ def get_args() -> argparse.Namespace:
         help="Save evaluation data (prompt, html, articles, meta.json)",
     )
     return parser.parse_args()
+
+
+import time
+from google.genai.errors import ClientError, APIError
+
+from google.genai.errors import ClientError, APIError
+
+
+def make_forced_error(debug_status_code):
+    # 4xx → APIError（位置引数が必須）
+    if 400 <= debug_status_code < 500:
+        return APIError(
+            debug_status_code,
+            {
+                "error": {
+                    "code": debug_status_code,
+                    "message": f"Forced {debug_status_code} for testing",
+                }
+            },
+            None,
+        )
+
+    # 5xx → ClientError（キーワード引数OK）
+    return ClientError(
+        status_code=debug_status_code,
+        response_json={
+            "error": {
+                "code": debug_status_code,
+                "message": f"Forced {debug_status_code} for testing",
+            }
+        },
+        response=None,
+    )
+
+
+def call_gemini_with_long_backoff(final_prompt, config, max_retries=3):
+    """Call Gemini API with long backoff and debug options."""
+
+    # select retry schedule based on debug mode
+    if config.get("force_error_status_test", False):
+        wait_schedule = config.get("retry_wait_seconds_debug", [5, 10, 15])
+        debug_status_code = config.get("force_error_status_code", 503)
+        print(
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}] "
+            f"DEBUG: force_error_status_test enabled → will force status {debug_status_code} for testing."
+        )
+    else:
+        wait_schedule = config.get("retry_wait_seconds", [300, 600, 900])
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    for attempt in range(max_retries):
+
+        try:
+            # force error raise for debugging
+            if config.get("force_error_status_test", False):
+                print(
+                    f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}] "
+                    f"TEST: force_error_status_test enabled → raising {debug_status_code}"
+                )
+                raise make_forced_error(debug_status_code)
+
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=final_prompt,
+            )
+            return response.text
+
+        # catch 429（APIError）, which is a non-retryable error
+        except APIError as e:
+            status = getattr(e, "code", None)
+
+            if status == 429:
+                print(
+                    f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}] "
+                    f"ERROR: Quota exhausted (429). Giving up immediately."
+                )
+                return None
+
+            print(
+                f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}] "
+                f"ERROR: Non-retryable API error ({status}): {e}"
+            )
+            return None
+
+        # catch 5xx（ClientError), which is a retryable error
+        except ClientError as e:
+            status = getattr(e, "status_code", None)
+
+            if status in (500, 502, 503, 504):
+                wait_sec = wait_schedule[attempt]
+                print(
+                    f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}] "
+                    f"WARNING: Gemini server busy (status {status}). "
+                    f"Retrying in {wait_sec//60 if wait_sec>=60 else wait_sec} "
+                    f"{'minutes' if wait_sec>=60 else 'seconds'}..."
+                )
+                time.sleep(wait_sec)
+                continue
+
+            print(
+                f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}] "
+                f"ERROR: Non-retryable Gemini error ({status}): {e}"
+            )
+            return None
+
+        # catch any other unexpected exceptions, we assume they are retryable
+        except Exception as e:
+            wait_sec = wait_schedule[attempt]
+            print(
+                f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}] "
+                f"WARNING: Unexpected error, retrying in {wait_sec//60 if wait_sec>=60 else wait_sec} "
+                f"{'minutes' if wait_sec>=60 else 'seconds'}: {e}"
+            )
+            time.sleep(wait_sec)
+            continue
+
+        # if all failed then return None
+        print(
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}] "
+            f"ERROR: Gemini API failed after {max_retries} retries."
+        )
+        return None
 
 
 def main():
@@ -206,18 +329,8 @@ def main():
 
     # 6. Call Gemini 2.5 API
     print("INFO: Analyzing and curating articles with Gemini 2.5...")
-    try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=final_prompt,
-        )
-        report_content = response.text
-    except Exception as e:
-        print(
-            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
-            f"ERROR: Gemini API execution failed: {e}"
-        )
+    report_content = call_gemini_with_long_backoff(final_prompt, config_data)
+    if report_content is None:
         return
 
     # 7. Send Curated Report Email

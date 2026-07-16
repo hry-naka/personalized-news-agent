@@ -1,16 +1,11 @@
 {
-    "num_output_articles": "15~20",
     "rss_channels": [
         {
             "query": "日本経済新聞",
-            "count": 50
+            "count": 10
         },
         {
             "query": "ニュース",
-            "count": 30
-        },
-        {
-            "query": "転職",
             "count": 10
         },
         {
@@ -21,5 +16,18 @@
             "query": "アート",
             "count": 10
         }
-    ]
+    ],
+    "num_output_articles": "5~10",
+    "retry_wait_seconds": [
+        300,
+        600,
+        900
+    ],
+    "retry_wait_seconds_debug": [
+        5,
+        10,
+        15
+    ],
+    "use_debug_retry": false,
+    "force_5xx_test": false
 }
