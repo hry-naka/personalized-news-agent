@@ -221,5 +221,7 @@ __marimo__/
 config.json
 main_prompt.txt
 user_profile.txt
+laaj-prompt.txt
+laaj-results/
 .DS_Store
 eval-data/

@@ -1,0 +1,83 @@
+I will send the judge prompt in multiple parts. Please wait until I send "END" and then combine.
+
+===BEGIN PART 1===
+
+You are an LLM-as-a-Judge evaluating the quality of a personalized news agent.
+
+Before scoring:
+- Insert your own model name into the "model" field in the CSV output.
+- If any part of the User Prompt or HTML Digest is written in a non-English language,
+  first translate it into English internally, then perform all evaluations based on the English translation.
+  Do NOT change the meaning during translation.
+
+---
+
+User Prompt (the agent’s input instruction):
+{{PROMPT}}
+
+===END PART 1===
+===BEGIN PART 2===
+
+Generated HTML Digest (the agent’s final output):
+{{HTML}}
+
+---
+
+===END PART 2===
+===BEGIN PART 3===
+
+Score each metric from 1.0 to 5.0 and provide a short explanation.
+Base all judgments strictly on the two items above:
+- The User Prompt
+- The Generated HTML Digest
+(After translating them into English if necessary.)
+
+Do not assume any external context.
+
+Scoring Rubric:
+
+1. article_selection
+   - Evaluate whether the HTML digest reflects an appropriate article choice based on the intent described in the User Prompt.
+   - Assess relevance, usefulness, and whether the digest content matches what the User Prompt requests.
+   - If the digest intentionally includes contrasting or counter content, judge whether that contrast is meaningful and justified by the User Prompt.
+
+2. summary_quality
+   - Evaluate the summary portion of the HTML digest.
+   - Judge whether the summary accurately reflects the content shown in the digest itself.
+   - Assess clarity, correctness, and whether essential information is captured.
+
+3. reasoning_quality
+   - Evaluate the “reasoning” or “explanation” portion inside the HTML digest.
+   - Judge whether the reasoning logically follows from the digest content and the User Prompt.
+   - Assess whether the explanation is coherent, grounded, and consistent.
+
+4. html_quality
+   - Evaluate the structure and correctness of the HTML digest.
+   - Assess formatting, readability, section organization, and whether the HTML is well-formed and easy to interpret.
+
+5. overall_alignment
+   - Evaluate whether the entire digest (summary, reasoning, structure) aligns with the intent and constraints described in the User Prompt.
+   - Judge consistency between the User Prompt and the final HTML digest.
+
+6. trajectory_quality
+   - Evaluate the consistency of reasoning across the digest.
+   - Judge whether the digest maintains coherent logic from beginning to end.
+   - Assess whether the agent’s output appears stable and internally consistent.
+
+7. bias_stability
+   - Evaluate whether the digest shows unnecessary bias or instability.
+   - Judge neutrality, fairness, and whether the output avoids unwarranted subjective or ideological drift.
+
+Output Format (CSV):
+model,metric,score,reason
+<your_model_name>,article_selection,<score>,"<reason>"
+<your_model_name>,summary_quality,<score>,"<reason>"
+<your_model_name>,reasoning_quality,<score>,"<reason>"
+<your_model_name>,html_quality,<score>,"<reason>"
+<your_model_name>,overall_alignment,<score>,"<reason>"
+<your_model_name>,trajectory_quality,<score>,"<reason>"
+<your_model_name>,bias_stability,<score>,"<reason>"
+
+===END PART 3===
+
+END
