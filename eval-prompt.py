@@ -19,6 +19,7 @@ header = (
     "is_counter"
 )
 
+
 def load_meta(target_dir):
     """Load meta information from a JSON file."""
     meta_path = os.path.join(target_dir, "meta.json")
@@ -261,11 +262,7 @@ def eval_summary(
     mail_subject = meta.get("mail_subject", "")
 
     # article_index is set to '-' for summary evaluation
-    row = (
-    f"{timestamp},{mail_subject},-,"
-    f",,,,{main_view_score:.6f},0"
-    )
-
+    row = f"{timestamp},{mail_subject},-," f",,,{main_view_score:.6f},0"
 
     if output_path:
         write_header = not os.path.exists(output_path)
