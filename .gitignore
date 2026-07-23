@@ -225,3 +225,4 @@ laaj-prompt.txt
 laaj-results/
 .DS_Store
 eval-data/
+*.csv
