@@ -141,11 +141,9 @@ def get_args() -> argparse.Namespace:
 import time
 from google.genai.errors import ClientError, APIError
 
-from google.genai.errors import ClientError, APIError
-
 
 def make_forced_error(debug_status_code):
-    # 4xx → APIError（位置引数が必須）
+    # 4xx → APIError
     if 400 <= debug_status_code < 500:
         return APIError(
             debug_status_code,
@@ -158,7 +156,7 @@ def make_forced_error(debug_status_code):
             None,
         )
 
-    # 5xx → ClientError（キーワード引数OK）
+    # 5xx -> ClientError
     return ClientError(
         status_code=debug_status_code,
         response_json={
