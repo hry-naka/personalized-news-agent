@@ -13,18 +13,6 @@ from datetime import datetime as DT
 from google import genai
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
-
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-TO_EMAIL = os.environ.get("TO_EMAIL")
-
-# SMTP server settings
-SMTP_SERVER = os.environ.get("SMTP_SERVER", "127.0.0.1")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
-SMTP_USER = os.environ.get("SMTP_USER")
-SMTP_PASS = os.environ.get("SMTP_PASS")
-
 # File path constants
 CONFIG_PATH = "config.json"
 PROFILE_PATH = "user_profile.txt"
@@ -262,20 +250,27 @@ def call_gemini_with_long_backoff(final_prompt, config, max_retries=3):
 def main():
     args = get_args()
 
-    # 1. Check core environment variables
-    if not GEMINI_API_KEY or not SMTP_USER or not SMTP_PASS or not TO_EMAIL:
-        print(
-            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
-            f"ERROR: Missing required settings in .env (API keys, SMTP credentials, etc.)."
-        )
-        return
-
-    # 2. Load external settings and assets
+    # 1. Load external settings and assets
     print(
-        f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
-        f"INFO: Loading configuration and asset files..."
+        f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Loading configuration and asset files..."
     )
     config_data, user_profile, prompt_template = load_external_files()
+
+    # Read settings from config.json
+    GEMINI_API_KEY = config_data.get("gemini_api_key")
+    globals()["GEMINI_API_KEY"] = GEMINI_API_KEY
+    SMTP_SERVER = config_data.get("smtp_server", "127.0.0.1")
+    SMTP_PORT = int(config_data.get("smtp_port", 587))
+    SMTP_USER = config_data.get("smtp_user")
+    SMTP_PASS = config_data.get("smtp_pass")
+    TO_EMAIL = config_data.get("to_email")
+
+    # 2. Check required settings
+    if not GEMINI_API_KEY or not SMTP_USER or not SMTP_PASS or not TO_EMAIL:
+        print(
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Missing required settings in config.json."
+        )
+        return
 
     rss_channels = config_data.get("rss_channels", [])
     if not rss_channels:

@@ -1,4 +1,10 @@
 {
+    "gemini_api_key": "xxxxx",
+    "smtp_server": "127.0.0.1",
+    "smtp_port": 587,
+    "smtp_user": "xxxxx",
+    "smtp_pass": "xxxxx",
+    "to_email": "xxxxx",
     "rss_channels": [
         {
             "query": "日本経済新聞",

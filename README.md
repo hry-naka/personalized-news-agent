@@ -63,34 +63,37 @@ pip install -r requirements.txt
 
 # Configuration
 
-### 1. `.env` file
+All configuration is now unified under **config.json**.  
+`.env` is no longer required.
 
-Create a `.env` file in the project root:
-```
-GEMINI_API_KEY=your_gemini_api_key
-SMTP_SERVER=smtp.example.com
-SMTP_PORT=587
-SMTP_USER=your_email@example.com
-SMTP_PASS=your_smtp_password
-TO_EMAIL=recipient@example.com
-```
-### 2. `config.json`
+### 1. `config.json`
 
-Defines RSS channels, output and debugging settings:
+Example:
+
 ```json
 {
+  "gemini_api_key": "YOUR_API_KEY",
+  "smtp_server": "smtp.example.com",
+  "smtp_port": 587,
+  "smtp_user": "your_email@example.com",
+  "smtp_pass": "your_smtp_password",
+  "to_email": "recipient@example.com",
+
   "rss_channels": [
     { "query": "technology", "count": 30 },
     { "query": "innovation", "count": 30 },
     { "query": "culture japan", "count": 30 }
   ],
+
   "num_output_articles": 12,
-  "retry_wait_seconds": [300,600,900],
+
+  "retry_wait_seconds": [300, 600, 900],
   "force_error_status_test": false,
-  "retry_wait_seconds_debug": [5,10,15],
+  "retry_wait_seconds_debug": [5, 10, 15],
   "force_error_status_code": 503
 }
 ```
+
 ### 3. `user_profile.txt`
 Defines the user’s interests, preferences, and intellectual tendencies.
 This profile is injected directly into the main prompt and strongly influences article selection.
