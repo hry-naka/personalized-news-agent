@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import json
+import yaml
 import argparse
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -14,9 +15,34 @@ from google import genai
 from dotenv import load_dotenv
 
 # File path constants
-CONFIG_PATH = "config.json"
+CONFIG_PATH = "config.yaml"
 PROFILE_PATH = "user_profile.txt"
 PROMPT_PATH = "main_prompt.txt"
+
+
+def generate_language_instructions(curate_language):
+    """Generate language instructions based on the 'curate_language' setting."""
+
+    language_instructions_same = (
+        "\nWrite the [Reason] and [Summary] in the same language as the original article.\n"
+        "- If the article title and content are in Japanese, write the output in Japanese.\n"
+        "- If the article is in English, write the output in English.\n"
+        "- Do not mix languages within a single article.\n"
+    )
+
+    language_instructions_spec = (
+        "\nWrite the [Reason] and [Summary] in {LANG}, regardless of the article’s original language.\n"
+        "- Even if the article is written in Japanese or another language, translate its content and write the output in {LANG}.\n"
+        "- Do not mix languages within a single article.\n"
+        "- Maintain natural, fluent {LANG} suitable for a native reader.\n"
+    )
+
+    if curate_language == "same":
+        return language_instructions_same
+    else:
+        return language_instructions_spec.replace(
+            "{LANG}", curate_language.capitalize()
+        )
 
 
 def load_external_files():
@@ -41,7 +67,7 @@ def load_external_files():
         sys.exit(1)
 
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        config_data = json.load(f)
+        config_data = yaml.safe_load(f)
 
     with open(PROFILE_PATH, "r", encoding="utf-8") as f:
         user_profile = f.read()
@@ -256,7 +282,7 @@ def main():
     )
     config_data, user_profile, prompt_template = load_external_files()
 
-    # Read settings from config.json
+    # Read settings from config.yaml
     GEMINI_API_KEY = config_data.get("gemini_api_key")
     globals()["GEMINI_API_KEY"] = GEMINI_API_KEY
     SMTP_SERVER = config_data.get("smtp_server", "127.0.0.1")
@@ -268,7 +294,7 @@ def main():
     # 2. Check required settings
     if not GEMINI_API_KEY or not SMTP_USER or not SMTP_PASS or not TO_EMAIL:
         print(
-            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Missing required settings in config.json."
+            f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Missing required settings in config.yaml."
         )
         return
 
@@ -276,7 +302,7 @@ def main():
     if not rss_channels:
         print(
             f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
-            f"ERROR: No RSS channels defined in config.json."
+            f"ERROR: No RSS channels defined in config.yaml."
         )
         return
 
@@ -310,16 +336,19 @@ def main():
         articles_text += f"URL: {article['url']}\n"
         articles_text += "---------------------\n"
 
-    # get the number of articles to output from config.json (default is 5)
-    num_output_articles = config_data.get("num_output_articles", 5)
+    # get the number of articles to output from config.yaml (default is 5)
+    num_output_articles = config_data.get("num_output_articles", "5")
 
     # 5. Construct Main Prompt
     final_prompt = (
         prompt_template.replace("{user_profile}", user_profile)
         .replace("{articles_text}", articles_text)
+        .replace(
+            "{language_instructions}",
+            generate_language_instructions(config_data.get("curate_language", "same")),
+        )
         .replace("{num_output_articles}", str(num_output_articles))
     )
-
     # 6. Call Gemini 2.5 API
     print("INFO: Analyzing and curating articles with Gemini 2.5...")
     report_content = call_gemini_with_long_backoff(final_prompt, config_data)

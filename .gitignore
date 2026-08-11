@@ -219,6 +219,7 @@ __marimo__/
 
 # This project specific ignores
 config.json
+config.yaml
 main_prompt.txt
 user_profile.txt
 laaj-prompt.txt

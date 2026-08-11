@@ -6,3 +6,4 @@ python-dotenv
 argparse
 beautifulsoup4
 pandas
+pyyaml

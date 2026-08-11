@@ -8,7 +8,7 @@ This project is designed for daily automated execution (cron) and includes a ful
 # Features
 
 ### RSS & Article Processing
-- Fetches news articles from multiple RSS channels defined in `config.json`
+- Fetches news articles from multiple RSS channels defined in `config.yaml`
 - Resolves redirect URLs to obtain the final article URL
 - Normalizes article metadata for consistent downstream processing
 
@@ -63,48 +63,109 @@ pip install -r requirements.txt
 
 # Configuration
 
-All configuration is now unified under **config.json**.  
-`.env` is no longer required.
+All configuration is now unified under **config.yaml**.  
+`.env` is no longer required. 
 
-### 1. `config.json`
+### 1. `config.yaml`
 
 Example:
 
-```json
-{
-  "gemini_api_key": "YOUR_API_KEY",
-  "smtp_server": "smtp.example.com",
-  "smtp_port": 587,
-  "smtp_user": "your_email@example.com",
-  "smtp_pass": "your_smtp_password",
-  "to_email": "recipient@example.com",
+```yaml
+# ============================================================
+# AI News Agent Configuration (YAML Version)
+# ============================================================
 
-  "rss_channels": [
-    { "query": "technology", "count": 30 },
-    { "query": "innovation", "count": 30 },
-    { "query": "culture japan", "count": 30 }
-  ],
+# ------------------------------------------------------------
+# Gemini API Settings
+# ------------------------------------------------------------
+gemini_api_key: "YOUR_GEMINI_API_KEY"
 
-  "num_output_articles": 12,
+# ------------------------------------------------------------
+# Email (SMTP) Settings
+# ------------------------------------------------------------
+smtp_server: "127.0.0.1"
+smtp_port: 587
+smtp_user: "your_email@example.com"
+smtp_pass: "your_password"
+to_email: "destination@example.com"
 
-  "retry_wait_seconds": [300, 600, 900],
-  "force_error_status_test": false,
-  "retry_wait_seconds_debug": [5, 10, 15],
-  "force_error_status_code": 503
-}
+# ------------------------------------------------------------
+# RSS Channels
+# - query: Bing News RSS search query
+# - count: number of articles to fetch
+# ------------------------------------------------------------
+rss_channels:
+  - query: "日本経済新聞"
+    count: 10
+  - query: "ニュース"
+    count: 10
+  - query: "音楽"
+    count: 10
+  - query: "アート"
+    count: 10
+
+# ------------------------------------------------------------
+# Number of curated articles to output
+# ------------------------------------------------------------
+num_output_articles: "5-10"
+
+# ------------------------------------------------------------
+# Language Control
+# - same: follow article language
+# - japanese: force Japanese output
+# - english: force English output
+# - any other string: used as {LANG} in instructions_spec
+# ------------------------------------------------------------
+curate_language: "same"
+
+# ------------------------------------------------------------
+# Language Instructions (for curate_language = "same")
+# ------------------------------------------------------------
+language_instructions_same: |
+  Write the [Reason] and [Summary] in the same language as the original article.
+  - If the article title and content are in Japanese, write the output in Japanese.
+  - If the article is in English, write the output in English.
+  - Do not mix languages within a single article.
+
+# ------------------------------------------------------------
+# Language Instructions (for curate_language != "same")
+# {LANG} will be replaced by Python code
+# ------------------------------------------------------------
+language_instructions_spec: |
+  Write the [Reason] and [Summary] in {LANG}, regardless of the article’s original language.
+  - Even if the article is written in Japanese or another language, translate its content and write the output in {LANG}.
+  - Do not mix languages within a single article.
+  - Maintain natural, fluent {LANG} suitable for a native reader.
+
+# ------------------------------------------------------------
+# Retry / Debug Settings
+# ------------------------------------------------------------
+retry_wait_seconds:
+  - 300   # 5 minutes
+  - 600   # 10 minutes
+  - 900   # 15 minutes
+
+# Debug mode (optional)
+force_error_status_test: false
+force_error_status_code: 503
+retry_wait_seconds_debug:
+  - 5
+  - 10
+  - 15
 ```
 
-### 3. `user_profile.txt`
+### 2. `user_profile.txt`
 Defines the user’s interests, preferences, and intellectual tendencies.
 This profile is injected directly into the main prompt and strongly influences article selection.
 
-### 4. `main_prompt.txt`
+### 3. `main_prompt.txt`
 Defines the HTML output structure and selection rules.
 The script replaces:
 
 ```
 {user_profile}
 {articles_text}
+{language_instructions}
 {num_output_articles}
 ```
 ---
@@ -277,7 +338,7 @@ personalized-news-agent/
  ├── summarize-eval.py
  ├── main_prompt.txt
  ├── user_profile.txt
- ├── config.json
+ ├── config.yaml
  ├── requirements.txt
  ├── run-news.sh
  ├── eval-data/
