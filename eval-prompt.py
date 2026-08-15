@@ -1,16 +1,17 @@
 import os
 import sys
 import json
+import yaml
 import argparse
 import numpy as np
 from google import genai
-from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 
-load_dotenv()
-
-# Embedding model setting（Gemini 2.5 Flash Embedding）
+# Default Embedding model
 EMBED_MODEL = "models/gemini-embedding-2"
+
+# Default Translation model (Gemini Flash)
+TRANSLATE_MODEL = "gemini-2.5-flash"
 
 
 header = (
@@ -20,8 +21,80 @@ header = (
 )
 
 
+def load_config():
+    """Load config.yaml for API keys and settings."""
+    if not os.path.exists("config.yaml"):
+        print("ERROR: config.yaml not found.")
+        sys.exit(1)
+    with open("config.yaml", "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def contains_non_ascii(text):
+    return any(ord(ch) > 127 for ch in text)
+
+
+def translate_text_to_english(client, text):
+    """Translate ONLY non-English text to English using Gemini."""
+    if not text or not text.strip():
+        return text
+
+    # If the text contains non-ASCII characters, assume translation is needed
+    if contains_non_ascii(text):
+        print(
+            f"INFO: Translating text to English using model {config.get('gemini_llm_model', TRANSLATE_MODEL)}..."
+        )
+        try:
+            response = client.models.generate_content(
+                model=config.get("gemini_llm_model", TRANSLATE_MODEL),
+                contents=config.get("translate_text_prompt") + f"{text}",
+            )
+            return response.text
+        except Exception as e:
+            print(f"WARNING: Translation failed, using original text: {e}")
+            return text
+    return text
+
+
+def translate_html_to_english(client, html_text):
+    """Translate ONLY non-English text inside HTML into English."""
+    if not html_text or not html_text.strip():
+        return html_text
+
+    if contains_non_ascii(html_text):
+        print(
+            f"INFO: Translating HTML to English using model {config.get('gemini_llm_model', TRANSLATE_MODEL)}..."
+        )
+        response = client.models.generate_content(
+            model=config.get("gemini_llm_model", TRANSLATE_MODEL),
+            contents=config.get("translate_html_prompt") + f"{html_text}",
+        )
+        return response.text
+    return html_text
+
+
+def save_translated_files(target_dir, prompt_eng, html_eng):
+    """Save translated prompt and HTML for debugging and evaluation verification."""
+    prompt_path = os.path.join(target_dir, "prompt-eng.txt")
+    html_path = os.path.join(target_dir, "report-eng.html")
+
+    try:
+        with open(prompt_path, "w", encoding="utf-8") as f:
+            f.write(prompt_eng)
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(html_eng)
+        print(f"INFO: Saved translated files to {target_dir}")
+    except Exception as e:
+        print(f"WARNING: Failed to save translated files: {e}")
+
+
+def translated_files_exist(target_dir):
+    prompt_eng = os.path.join(target_dir, "prompt-eng.txt")
+    html_eng = os.path.join(target_dir, "report-eng.html")
+    return os.path.exists(prompt_eng) and os.path.exists(html_eng)
+
+
 def load_meta(target_dir):
-    """Load meta information from a JSON file."""
     meta_path = os.path.join(target_dir, "meta.json")
     if not os.path.exists(meta_path):
         print(f"ERROR: meta.json not found in {target_dir}")
@@ -31,7 +104,6 @@ def load_meta(target_dir):
 
 
 def load_text_file(target_dir, filename):
-    """Load text content from a file."""
     path = os.path.join(target_dir, filename)
     if not os.path.exists(path):
         print(f"ERROR: Required file '{filename}' not found in {target_dir}")
@@ -41,7 +113,6 @@ def load_text_file(target_dir, filename):
 
 
 def load_json_file(target_dir, filename):
-    """Load JSON content from a file."""
     path = os.path.join(target_dir, filename)
     if not os.path.exists(path):
         print(f"ERROR: Required file '{filename}' not found in {target_dir}")
@@ -51,33 +122,27 @@ def load_json_file(target_dir, filename):
 
 
 def cosine_similarity(v1, v2):
-    """Calculate cosine similarity between two vectors."""
     v1 = np.array(v1)
     v2 = np.array(v2)
     return float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
 
 
 def get_embedding(client, text):
-    """Get embedding for a given text."""
     if not text or not text.strip():
         return np.zeros(768, dtype=float).tolist()
-    response = client.models.embed_content(model=EMBED_MODEL, contents=text)
+    response = client.models.embed_content(
+        model=config.get("gemini_embedding_model", EMBED_MODEL), contents=text
+    )
     return response.embeddings[0].values
 
 
 def detect_latest_eval_dir():
-    """Detect the latest evaluation directory based on timestamp."""
     base = "eval-data"
     if not os.path.exists(base):
         print("ERROR: eval-data directory not found.")
         sys.exit(1)
 
-    dirs = []
-    for d in os.listdir(base):
-        full = os.path.join(base, d)
-        if os.path.isdir(full) and d.isdigit():
-            dirs.append(d)
-
+    dirs = [d for d in os.listdir(base) if d.isdigit()]
     if not dirs:
         print("ERROR: No timestamp directories found in eval-data.")
         sys.exit(1)
@@ -87,7 +152,6 @@ def detect_latest_eval_dir():
 
 
 def parse_args():
-    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Evaluate prompt vs output HTML.")
     parser.add_argument(
         "-i",
@@ -108,32 +172,28 @@ def parse_args():
 
 
 def parse_articles_from_html(html_text):
-    """Parse articles from HTML text and extract relevant information."""
     soup = BeautifulSoup(html_text, "html.parser")
     articles = []
 
     for idx, art in enumerate(soup.find_all("article"), start=1):
-        # Title
         a_tag = art.find("a")
         title = a_tag.get_text(strip=True) if a_tag else ""
 
-        # Reason
+        # Updated labels for B-test
         reason_el = art.find(class_="reason")
         if not reason_el:
-            reason_el = art.find(string=lambda x: "選定理由" in x)
+            reason_el = art.find(string=lambda x: "[Reason]" in x)
         reason = (
             reason_el.get_text(strip=True) if hasattr(reason_el, "get_text") else ""
         )
 
-        # Summary
         summary_el = art.find(class_="summary")
         if not summary_el:
-            summary_el = art.find(string=lambda x: "記事の要約" in x)
+            summary_el = art.find(string=lambda x: "[Summary]" in x)
         summary = (
             summary_el.get_text(strip=True) if hasattr(summary_el, "get_text") else ""
         )
 
-        # Counter-view detection
         is_counter = art.get("data-view-type", "") == "counter"
 
         articles.append(
@@ -151,21 +211,31 @@ def parse_articles_from_html(html_text):
 
 
 def eval_per_article(
-    client, prompt_text, html_text, meta, output_path, header_only=False
+    client, prompt_text, html_text, meta, target_dir, output_path, header_only=False
 ):
-    """Evaluate each article against the prompt and output scores."""
     if header_only:
         if output_path:
             write_header = not os.path.exists(output_path)
             with open(output_path, "a", encoding="utf-8") as f:
                 if write_header:
                     f.write(header + "\n")
-            print(f"INFO: Header written to {output_path}")
         else:
             print(header)
         return
-    prompt_vec = get_embedding(client, prompt_text)
-    articles = parse_articles_from_html(html_text)
+
+    # Translate prompt & HTML to English
+    if translated_files_exist(target_dir):
+        print("INFO: Using existing translated files...")
+        prompt_text_eng = load_text_file(target_dir, "prompt-eng.txt")
+        html_text_eng = load_text_file(target_dir, "report-eng.html")
+    else:
+        prompt_text_eng = translate_text_to_english(client, prompt_text)
+        html_text_eng = translate_html_to_english(client, html_text)
+        save_translated_files(target_dir, prompt_text_eng, html_text_eng)
+        save_translated_files(target_dir, prompt_text_eng, html_text_eng)
+
+    prompt_vec = get_embedding(client, prompt_text_eng)
+    articles = parse_articles_from_html(html_text_eng)
 
     timestamp = meta["timestamp"]
     mail_subject = meta.get("mail_subject", "")
@@ -175,6 +245,7 @@ def eval_per_article(
         with open(output_path, "a", encoding="utf-8") as f:
             if write_header:
                 f.write(header + "\n")
+
             for art in articles:
                 title_vec = get_embedding(client, art["title"])
                 summary_vec = get_embedding(client, art["summary"])
@@ -203,7 +274,6 @@ def eval_per_article(
                     f"{int(art['is_counter'])}"
                 )
                 f.write(row + "\n")
-        print(f"INFO: Appended per-article evaluation to {output_path}")
     else:
         print(header)
         for art in articles:
@@ -237,31 +307,44 @@ def eval_per_article(
 
 
 def eval_summary(
-    client, prompt_text, html_text, articles_list, meta, output_path, header_only=False
+    client,
+    prompt_text,
+    html_text,
+    articles_list,
+    meta,
+    target_dir,
+    output_path,
+    header_only=False,
 ):
-    """Evaluate the overall summary against the prompt and output scores."""
-
     if header_only:
         if output_path:
             write_header = not os.path.exists(output_path)
             with open(output_path, "a", encoding="utf-8") as f:
                 if write_header:
                     f.write(header + "\n")
-            print(f"INFO: Header written to {output_path}")
         else:
             print(header)
         return
 
-    prompt_vec = get_embedding(client, prompt_text)
-    html_vec = get_embedding(client, html_text)
+    # Translate prompt & HTML to English
+    if translated_files_exist(target_dir):
+        print("INFO: Using existing translated files...")
+        prompt_text_eng = load_text_file(target_dir, "prompt-eng.txt")
+        html_text_eng = load_text_file(target_dir, "report-eng.html")
+    else:
+        prompt_text_eng = translate_text_to_english(client, prompt_text)
+        html_text_eng = translate_html_to_english(client, html_text)
+        save_translated_files(target_dir, prompt_text_eng, html_text_eng)
+        save_translated_files(target_dir, prompt_text_eng, html_text_eng)
+
+    prompt_vec = get_embedding(client, prompt_text_eng)
+    html_vec = get_embedding(client, html_text_eng)
 
     main_view_score = cosine_similarity(prompt_vec, html_vec)
-    counter_view_score = 1.0 - main_view_score
 
     timestamp = meta["timestamp"]
     mail_subject = meta.get("mail_subject", "")
 
-    # article_index is set to '-' for summary evaluation
     row = f"{timestamp},{mail_subject},-," f",,,{main_view_score:.6f},0"
 
     if output_path:
@@ -270,15 +353,23 @@ def eval_summary(
             if write_header:
                 f.write(header + "\n")
             f.write(row + "\n")
-        print(f"INFO: Appended evaluation result to {output_path}")
     else:
         print(header)
         print(row)
 
 
 def main():
-    """Main function to handle evaluation based on command-line arguments."""
     args = parse_args()
+
+    # Load config.yaml
+    global config
+    config = load_config()
+    GEMINI_API_KEY = config.get("gemini_api_key")
+    if not GEMINI_API_KEY:
+        print("ERROR: gemini_api_key missing in config.yaml")
+        sys.exit(1)
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
 
     if args.input == "latest":
         target_dir = detect_latest_eval_dir()
@@ -293,8 +384,6 @@ def main():
     html_text = load_text_file(target_dir, meta["html_file"])
     articles_list = load_json_file(target_dir, meta["articles_file"])
 
-    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-
     if args.mode == "summary":
         eval_summary(
             client=client,
@@ -302,6 +391,7 @@ def main():
             html_text=html_text,
             articles_list=articles_list,
             meta=meta,
+            target_dir=target_dir,
             output_path=args.output,
             header_only=args.header,
         )
@@ -312,6 +402,7 @@ def main():
             prompt_text=prompt_text,
             html_text=html_text,
             meta=meta,
+            target_dir=target_dir,
             output_path=args.output,
             header_only=args.header,
         )
@@ -323,6 +414,7 @@ def main():
             html_text=html_text,
             articles_list=articles_list,
             meta=meta,
+            target_dir=target_dir,
             output_path=args.output,
             header_only=args.header,
         )
@@ -331,6 +423,7 @@ def main():
             prompt_text=prompt_text,
             html_text=html_text,
             meta=meta,
+            target_dir=target_dir,
             output_path=args.output,
             header_only=False,
         )

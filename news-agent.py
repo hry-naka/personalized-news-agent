@@ -197,7 +197,7 @@ def call_gemini_with_long_backoff(final_prompt, config, max_retries=3):
     else:
         wait_schedule = config.get("retry_wait_seconds", [300, 600, 900])
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    client = genai.Client(api_key=config.get("gemini_api_key"))
 
     for attempt in range(max_retries):
 
@@ -211,7 +211,7 @@ def call_gemini_with_long_backoff(final_prompt, config, max_retries=3):
                 raise make_forced_error(debug_status_code)
 
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model=config.get("gemini_llm_model", "gemini-3.5-flash-lite"),
                 contents=final_prompt,
             )
             return response.text
@@ -283,8 +283,8 @@ def main():
     config_data, user_profile, prompt_template = load_external_files()
 
     # Read settings from config.yaml
-    GEMINI_API_KEY = config_data.get("gemini_api_key")
-    globals()["GEMINI_API_KEY"] = GEMINI_API_KEY
+    # GEMINI_API_KEY = config_data.get("gemini_api_key")
+    # globals()["GEMINI_API_KEY"] = GEMINI_API_KEY
     SMTP_SERVER = config_data.get("smtp_server", "127.0.0.1")
     SMTP_PORT = int(config_data.get("smtp_port", 587))
     SMTP_USER = config_data.get("smtp_user")
@@ -292,7 +292,12 @@ def main():
     TO_EMAIL = config_data.get("to_email")
 
     # 2. Check required settings
-    if not GEMINI_API_KEY or not SMTP_USER or not SMTP_PASS or not TO_EMAIL:
+    if (
+        not config_data.get("gemini_api_key")
+        or not SMTP_USER
+        or not SMTP_PASS
+        or not TO_EMAIL
+    ):
         print(
             f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Missing required settings in config.yaml."
         )
@@ -349,8 +354,10 @@ def main():
         )
         .replace("{num_output_articles}", str(num_output_articles))
     )
-    # 6. Call Gemini 2.5 API
-    print("INFO: Analyzing and curating articles with Gemini 2.5...")
+    # 6. Call Gemini API
+    print(
+        f"INFO: Analyzing and curating articles with {config_data.get('gemini_llm_model', 'gemini-3.5-flash-lite')}..."
+    )
     report_content = call_gemini_with_long_backoff(final_prompt, config_data)
     if report_content is None:
         return
