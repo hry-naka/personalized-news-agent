@@ -68,6 +68,71 @@ language_instructions_spec: |
   - Do not mix languages within a single article.
   - Maintain natural, fluent {LANG} suitable for a native reader.
 
+translate_text_prompt: |
+  Translate ONLY the non-English text inside the following content into natural English.
+
+  CRITICAL RULES:
+    - Do NOT translate any English text.
+    - Do NOT translate section headers, structural instructions, or formatting rules.
+    - Do NOT translate HTML-like tags or Markdown-like symbols.
+    - Translate ONLY the non-English sentences found inside:
+      * Article titles
+      * [Reason] text
+      * [Summary] text
+      * Non-English descriptions inside the User Profile
+      * Non-English titles inside the Candidate Article List
+
+  Proper nouns MUST follow this format:
+    EnglishTranslation (OriginalLanguage)
+  Examples:
+    徳島 → Tokushima (徳島)
+    阿波踊り → Awa Odori (阿波踊り)
+    鬼滅の刃 → Demon Slayer: Kimetsu no Yaiba (鬼滅の刃)
+    自衛隊 → Japan Self-Defense Forces (自衛隊)
+
+  STRICTLY PRESERVE:
+    * All line breaks
+    * All indentation
+    * All symbols
+    * All numbering
+    * All section boundaries
+    * All English text exactly as-is
+
+  Do NOT reorder any content.
+  Do NOT shorten or summarize anything.
+
+  Now translate ONLY the non-English text:
+
+translate_html_prompt: |
+  Translate ONLY the non-English text inside the following HTML into natural English.
+
+  CRITICAL RULES:
+    - Do NOT translate any English text.
+    - Do NOT translate HTML tags, attributes, classes, or structure.
+    - Translate ONLY human-readable non-English text.
+    - Translate article titles, [Reason], [Summary], and any non-English labels.
+
+  Proper nouns MUST follow this format:
+    EnglishTranslation (OriginalLanguage)
+
+  Examples:
+    徳島 → Tokushima (徳島)
+    阿波踊り → Awa Odori (阿波踊り)
+    鬼滅の刃 → Demon Slayer: Kimetsu no Yaiba (鬼滅の刃)
+    自衛隊 → Japan Self-Defense Forces (自衛隊)
+
+  STRICTLY PRESERVE:
+    - All whitespace
+    - All line breaks
+    - All symbols
+    - All HTML structure exactly as-is
+    - All English text exactly as-is
+
+  Do NOT reorder any content.
+  Do NOT shorten or summarize anything.
+
+  Now translate ONLY the non-English text:
+
 # ------------------------------------------------------------
 # Retry / Debug Settings
 # ------------------------------------------------------------
