@@ -224,6 +224,7 @@ main_prompt.txt
 user_profile.txt
 laaj-prompt.txt
 laaj-results/
+ab-tests/
 .DS_Store
 eval-data/
 *.csv
