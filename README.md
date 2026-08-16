@@ -68,7 +68,7 @@ All configuration is now unified under **config.yaml**.
 
 ### 1. `config.yaml`
 
-Example:
+The agent loads configuration from `config.yaml` directly. The actual schema currently used by the code is as follows:
 
 ```yaml
 # ============================================================
@@ -79,6 +79,20 @@ Example:
 # Gemini API Settings
 # ------------------------------------------------------------
 gemini_api_key: "YOUR_GEMINI_API_KEY"
+#gemini_llm_model: "gemini-2.5-flash"
+gemini_llm_model: "gemini-3.5-flash-lite"
+#gemini_llm_model: "gemini-3.7-flash"
+gemini_embedding_model: "models/gemini-embedding-2"
+
+# Translation prompts used by eval-prompt.py when non-ASCII text is detected.
+translate_text_prompt: |
+  Translate the following text into English.
+  Preserve the meaning and tone, and return only the translated text.
+
+translate_html_prompt: |
+  Translate all visible text in the following HTML into English.
+  Preserve the structure and formatting as much as possible.
+  Return only the translated HTML.
 
 # ------------------------------------------------------------
 # Email (SMTP) Settings
@@ -153,6 +167,12 @@ retry_wait_seconds_debug:
   - 10
   - 15
 ```
+
+Key notes:
+- `gemini_llm_model` controls the news-curation model used by `news-agent.py`.
+- `gemini_embedding_model` controls the embedding model used by `eval-prompt.py`.
+- `translate_text_prompt` and `translate_html_prompt` are optional override strings used by `eval-prompt.py` when non-ASCII content is translated to English; if omitted, the code falls back to the default behavior.
+- `retry_wait_seconds` and `retry_wait_seconds_debug` are used by `call_gemini_with_long_backoff()` for API retry backoff.
 
 ### 2. `user_profile.txt`
 Defines the user’s interests, preferences, and intellectual tendencies.
