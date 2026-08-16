@@ -34,7 +34,7 @@ def contains_non_ascii(text):
     return any(ord(ch) > 127 for ch in text)
 
 
-def translate_text_to_english(client, text):
+def translate_text_to_english(client, text, config):
     """Translate ONLY non-English text to English using Gemini."""
     if not text or not text.strip():
         return text
@@ -56,7 +56,7 @@ def translate_text_to_english(client, text):
     return text
 
 
-def translate_html_to_english(client, html_text):
+def translate_html_to_english(client, html_text, config):
     """Translate ONLY non-English text inside HTML into English."""
     if not html_text or not html_text.strip():
         return html_text
@@ -127,7 +127,7 @@ def cosine_similarity(v1, v2):
     return float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
 
 
-def get_embedding(client, text):
+def get_embedding(client, text, config):
     if not text or not text.strip():
         return np.zeros(768, dtype=float).tolist()
     response = client.models.embed_content(
@@ -211,7 +211,14 @@ def parse_articles_from_html(html_text):
 
 
 def eval_per_article(
-    client, prompt_text, html_text, meta, target_dir, output_path, header_only=False
+    client,
+    config,
+    prompt_text,
+    html_text,
+    meta,
+    target_dir,
+    output_path,
+    header_only=False,
 ):
     if header_only:
         if output_path:
@@ -229,12 +236,12 @@ def eval_per_article(
         prompt_text_eng = load_text_file(target_dir, "prompt-eng.txt")
         html_text_eng = load_text_file(target_dir, "report-eng.html")
     else:
-        prompt_text_eng = translate_text_to_english(client, prompt_text)
-        html_text_eng = translate_html_to_english(client, html_text)
+        prompt_text_eng = translate_text_to_english(client, prompt_text, config)
+        html_text_eng = translate_html_to_english(client, html_text, config)
         save_translated_files(target_dir, prompt_text_eng, html_text_eng)
         save_translated_files(target_dir, prompt_text_eng, html_text_eng)
 
-    prompt_vec = get_embedding(client, prompt_text_eng)
+    prompt_vec = get_embedding(client, prompt_text_eng, config)
     articles = parse_articles_from_html(html_text_eng)
 
     timestamp = meta["timestamp"]
@@ -247,10 +254,10 @@ def eval_per_article(
                 f.write(header + "\n")
 
             for art in articles:
-                title_vec = get_embedding(client, art["title"])
-                summary_vec = get_embedding(client, art["summary"])
-                reason_vec = get_embedding(client, art["reason"])
-                article_vec = get_embedding(client, art["raw_html"])
+                title_vec = get_embedding(client, art["title"], config)
+                summary_vec = get_embedding(client, art["summary"], config)
+                reason_vec = get_embedding(client, art["reason"], config)
+                article_vec = get_embedding(client, art["raw_html"], config)
 
                 title_sim = cosine_similarity(prompt_vec, title_vec)
                 summary_sim = cosine_similarity(prompt_vec, summary_vec)
@@ -277,10 +284,10 @@ def eval_per_article(
     else:
         print(header)
         for art in articles:
-            title_vec = get_embedding(client, art["title"])
-            summary_vec = get_embedding(client, art["summary"])
-            reason_vec = get_embedding(client, art["reason"])
-            article_vec = get_embedding(client, art["raw_html"])
+            title_vec = get_embedding(client, art["title"], config)
+            summary_vec = get_embedding(client, art["summary"], config)
+            reason_vec = get_embedding(client, art["reason"], config)
+            article_vec = get_embedding(client, art["raw_html"], config)
 
             title_sim = cosine_similarity(prompt_vec, title_vec)
             summary_sim = cosine_similarity(prompt_vec, summary_vec)
@@ -308,6 +315,7 @@ def eval_per_article(
 
 def eval_summary(
     client,
+    config,
     prompt_text,
     html_text,
     articles_list,
@@ -332,13 +340,13 @@ def eval_summary(
         prompt_text_eng = load_text_file(target_dir, "prompt-eng.txt")
         html_text_eng = load_text_file(target_dir, "report-eng.html")
     else:
-        prompt_text_eng = translate_text_to_english(client, prompt_text)
-        html_text_eng = translate_html_to_english(client, html_text)
+        prompt_text_eng = translate_text_to_english(client, prompt_text, config)
+        html_text_eng = translate_html_to_english(client, html_text, config)
         save_translated_files(target_dir, prompt_text_eng, html_text_eng)
         save_translated_files(target_dir, prompt_text_eng, html_text_eng)
 
-    prompt_vec = get_embedding(client, prompt_text_eng)
-    html_vec = get_embedding(client, html_text_eng)
+    prompt_vec = get_embedding(client, prompt_text_eng, config)
+    html_vec = get_embedding(client, html_text_eng, config)
 
     main_view_score = cosine_similarity(prompt_vec, html_vec)
 
@@ -362,7 +370,6 @@ def main():
     args = parse_args()
 
     # Load config.yaml
-    global config
     config = load_config()
     GEMINI_API_KEY = config.get("gemini_api_key")
     if not GEMINI_API_KEY:
@@ -387,6 +394,7 @@ def main():
     if args.mode == "summary":
         eval_summary(
             client=client,
+            config=config,
             prompt_text=prompt_text,
             html_text=html_text,
             articles_list=articles_list,
@@ -399,6 +407,7 @@ def main():
     elif args.mode == "articles":
         eval_per_article(
             client=client,
+            config=config,
             prompt_text=prompt_text,
             html_text=html_text,
             meta=meta,
@@ -410,6 +419,7 @@ def main():
     elif args.mode == "all":
         eval_summary(
             client=client,
+            config=config,
             prompt_text=prompt_text,
             html_text=html_text,
             articles_list=articles_list,
@@ -420,6 +430,7 @@ def main():
         )
         eval_per_article(
             client=client,
+            config=config,
             prompt_text=prompt_text,
             html_text=html_text,
             meta=meta,

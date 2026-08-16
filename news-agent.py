@@ -283,8 +283,6 @@ def main():
     config_data, user_profile, prompt_template = load_external_files()
 
     # Read settings from config.yaml
-    # GEMINI_API_KEY = config_data.get("gemini_api_key")
-    # globals()["GEMINI_API_KEY"] = GEMINI_API_KEY
     SMTP_SERVER = config_data.get("smtp_server", "127.0.0.1")
     SMTP_PORT = int(config_data.get("smtp_port", 587))
     SMTP_USER = config_data.get("smtp_user")
