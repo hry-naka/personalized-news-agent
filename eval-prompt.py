@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import yaml
+import re
 import argparse
 import numpy as np
 from google import genai
@@ -127,9 +128,25 @@ def cosine_similarity(v1, v2):
     return float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
 
 
+def safe_embedding_text(label):
+    """Return a safe default text for embedding."""
+    return f"{label} not found"
+
+
 def get_embedding(client, text, config):
+    """Get embedding vector for the given text using Gemini embedding model."""
     if not text or not text.strip():
-        return np.zeros(768, dtype=float).tolist()
+        # if text is empty or whitespace-only, use a safe default
+        safe_text = safe_embedding_text("text")
+        return (
+            client.models.embed_content(
+                model=config.get("gemini_embedding_model", EMBED_MODEL),
+                contents=safe_text,
+            )
+            .embeddings[0]
+            .values
+        )
+
     response = client.models.embed_content(
         model=config.get("gemini_embedding_model", EMBED_MODEL), contents=text
     )
@@ -171,7 +188,35 @@ def parse_args():
     return parser.parse_args()
 
 
+import re
+
+
+def extract_reason(art):
+    """Extract reason text from an article element, handling variations in HTML structure."""
+    reason_el = art.find(class_="reason")
+    if not reason_el:
+        reason_el = art.find(
+            string=lambda x: re.search(r"Reason", x or "", re.IGNORECASE)
+        )
+    if reason_el and hasattr(reason_el, "get_text"):
+        return reason_el.get_text(strip=True)
+    return "(reason not found)"
+
+
+def extract_summary(art):
+    """Extract summary text from an article element, handling variations in HTML structure."""
+    summary_el = art.find(class_="summary")
+    if not summary_el:
+        summary_el = art.find(
+            string=lambda x: re.search(r"Summary", x or "", re.IGNORECASE)
+        )
+    if summary_el and hasattr(summary_el, "get_text"):
+        return summary_el.get_text(strip=True)
+    return "(summary not found)"
+
+
 def parse_articles_from_html(html_text):
+    """Parse articles from HTML and extract title, summary, reason, and counter status."""
     soup = BeautifulSoup(html_text, "html.parser")
     articles = []
 
@@ -180,19 +225,8 @@ def parse_articles_from_html(html_text):
         title = a_tag.get_text(strip=True) if a_tag else ""
 
         # Updated labels for B-test
-        reason_el = art.find(class_="reason")
-        if not reason_el:
-            reason_el = art.find(string=lambda x: "[Reason]" in x)
-        reason = (
-            reason_el.get_text(strip=True) if hasattr(reason_el, "get_text") else ""
-        )
-
-        summary_el = art.find(class_="summary")
-        if not summary_el:
-            summary_el = art.find(string=lambda x: "[Summary]" in x)
-        summary = (
-            summary_el.get_text(strip=True) if hasattr(summary_el, "get_text") else ""
-        )
+        reason = extract_reason(art)
+        summary = extract_summary(art)
 
         is_counter = art.get("data-view-type", "") == "counter"
 
