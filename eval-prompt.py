@@ -472,6 +472,7 @@ def main():
             output_path=args.output,
             header_only=False,
         )
+    print("INFO: evaluation done.")
 
 
 if __name__ == "__main__":
