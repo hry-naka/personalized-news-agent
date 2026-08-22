@@ -18,7 +18,7 @@ TRANSLATE_MODEL = "gemini-2.5-flash"
 header = (
     "timestamp,mail_subject,article_index,"
     "title_score,summary_score,reason_score,article_score,"
-    "is_counter"
+    "is_counter,is_translated"
 )
 
 
@@ -188,9 +188,6 @@ def parse_args():
     return parser.parse_args()
 
 
-import re
-
-
 def extract_reason(art):
     """Extract reason text from an article element, handling variations in HTML structure."""
     reason_el = art.find(class_="reason")
@@ -244,6 +241,84 @@ def parse_articles_from_html(html_text):
     return articles
 
 
+def get_prompt_and_html(
+    client, config, prompt_text, html_text, target_dir, force_no_translation
+):
+    """Get prompt and HTML text, translating to English if needed."""
+    if force_no_translation:
+        return prompt_text, html_text
+
+    if config.get("translate_when_evaluating", True):
+        if translated_files_exist(target_dir):
+            return load_text_file(target_dir, "prompt-eng.txt"), load_text_file(
+                target_dir, "report-eng.html"
+            )
+        else:
+            prompt_eng = translate_text_to_english(client, prompt_text, config)
+            html_eng = translate_html_to_english(client, html_text, config)
+            save_translated_files(target_dir, prompt_eng, html_eng)
+            return prompt_eng, html_eng
+    else:
+        return prompt_text, html_text
+
+
+def evaluate_prompt_and_html(client, config, prompt_text, html_text):
+    prompt_vec = get_embedding(client, prompt_text, config)
+    html_vec = get_embedding(client, html_text, config)
+    main_score = cosine_similarity(prompt_vec, html_vec)
+    return main_score
+
+
+def evaluate_articles(client, config, prompt_text, html_text):
+    """Evaluate each article's title, summary, reason, and overall content against the prompt."""
+    prompt_vec = get_embedding(client, prompt_text, config)
+    articles = parse_articles_from_html(html_text)
+    results = []
+    for art in articles:
+        title_vec = get_embedding(client, art["title"], config)
+        summary_vec = get_embedding(client, art["summary"], config)
+        reason_vec = get_embedding(client, art["reason"], config)
+        article_vec = get_embedding(client, art["raw_html"], config)
+        if art["is_counter"]:
+            title_score = 1.0 - cosine_similarity(prompt_vec, title_vec)
+            summary_score = 1.0 - cosine_similarity(prompt_vec, summary_vec)
+            reason_score = 1.0 - cosine_similarity(prompt_vec, reason_vec)
+            article_score = 1.0 - cosine_similarity(prompt_vec, article_vec)
+        else:
+            title_score = cosine_similarity(prompt_vec, title_vec)
+            summary_score = cosine_similarity(prompt_vec, summary_vec)
+            reason_score = cosine_similarity(prompt_vec, reason_vec)
+            article_score = cosine_similarity(prompt_vec, article_vec)
+        results.append(
+            {
+                "index": art["index"],
+                "title_score": title_score,
+                "summary_score": summary_score,
+                "reason_score": reason_score,
+                "article_score": article_score,
+                "is_counter": art["is_counter"],
+            }
+        )
+    return results
+
+
+def write_summary_row(f, timestamp, mail_subject, score, is_translated):
+    """Write a single row of summary evaluation to the output file."""
+    row = f"{timestamp},{mail_subject},-,,,," f"{score:.6f},0,{is_translated}"
+    f.write(row + "\n")
+
+
+def write_article_row(f, timestamp, mail_subject, result, is_translated):
+    """Write a single row of article evaluation to the output file."""
+    row = (
+        f"{timestamp},{mail_subject},{result['index']},"
+        f"{result['title_score']:.6f},{result['summary_score']:.6f},"
+        f"{result['reason_score']:.6f},{result['article_score']:.6f},"
+        f"{result['is_counter']},{is_translated}"
+    )
+    f.write(row + "\n")
+
+
 def eval_per_article(
     client,
     config,
@@ -254,6 +329,7 @@ def eval_per_article(
     output_path,
     header_only=False,
 ):
+    """Evaluate each article against the prompt and write results to output file."""
     if header_only:
         if output_path:
             write_header = not os.path.exists(output_path)
@@ -264,87 +340,65 @@ def eval_per_article(
             print(header)
         return
 
-    # Translate prompt & HTML to English
-    if translated_files_exist(target_dir):
-        print("INFO: Using existing translated files...")
-        prompt_text_eng = load_text_file(target_dir, "prompt-eng.txt")
-        html_text_eng = load_text_file(target_dir, "report-eng.html")
-    else:
-        prompt_text_eng = translate_text_to_english(client, prompt_text, config)
-        html_text_eng = translate_html_to_english(client, html_text, config)
-        save_translated_files(target_dir, prompt_text_eng, html_text_eng)
-        save_translated_files(target_dir, prompt_text_eng, html_text_eng)
-
-    prompt_vec = get_embedding(client, prompt_text_eng, config)
-    articles = parse_articles_from_html(html_text_eng)
-
-    timestamp = meta["timestamp"]
-    mail_subject = meta.get("mail_subject", "")
-
-    if output_path:
-        write_header = not os.path.exists(output_path)
+    if config.get("translate_when_evaluating", True):
+        # translation enabled
+        target_prompt, target_html = get_prompt_and_html(
+            client,
+            config,
+            prompt_text,
+            html_text,
+            target_dir,
+            force_no_translation=False,
+        )
+        results = evaluate_articles(client, config, target_prompt, target_html)
         with open(output_path, "a", encoding="utf-8") as f:
-            if write_header:
-                f.write(header + "\n")
-
-            for art in articles:
-                title_vec = get_embedding(client, art["title"], config)
-                summary_vec = get_embedding(client, art["summary"], config)
-                reason_vec = get_embedding(client, art["reason"], config)
-                article_vec = get_embedding(client, art["raw_html"], config)
-
-                title_sim = cosine_similarity(prompt_vec, title_vec)
-                summary_sim = cosine_similarity(prompt_vec, summary_vec)
-                reason_sim = cosine_similarity(prompt_vec, reason_vec)
-                article_sim = cosine_similarity(prompt_vec, article_vec)
-
-                if art["is_counter"]:
-                    title_score = 1.0 - title_sim
-                    summary_score = 1.0 - summary_sim
-                    reason_score = 1.0 - reason_sim
-                    article_score = 1.0 - article_sim
-                else:
-                    title_score = title_sim
-                    summary_score = summary_sim
-                    reason_score = reason_sim
-                    article_score = article_sim
-
-                row = (
-                    f"{timestamp},{mail_subject},{art['index']},"
-                    f"{title_score:.6f},{summary_score:.6f},{reason_score:.6f},{article_score:.6f},"
-                    f"{int(art['is_counter'])}"
+            for r in results:
+                write_article_row(
+                    f,
+                    meta["timestamp"],
+                    meta.get("mail_subject", ""),
+                    r,
+                    is_translated=1,
                 )
-                f.write(row + "\n")
+        # translation disabled
+        prompt_raw, html_raw = get_prompt_and_html(
+            client,
+            config,
+            prompt_text,
+            html_text,
+            target_dir,
+            force_no_translation=True,
+        )
+        results_raw = evaluate_articles(client, config, prompt_raw, html_raw)
+        with open(output_path, "a", encoding="utf-8") as f:
+            for r in results_raw:
+                write_article_row(
+                    f,
+                    meta["timestamp"],
+                    meta.get("mail_subject", ""),
+                    r,
+                    is_translated=0,
+                )
     else:
-        print(header)
-        for art in articles:
-            title_vec = get_embedding(client, art["title"], config)
-            summary_vec = get_embedding(client, art["summary"], config)
-            reason_vec = get_embedding(client, art["reason"], config)
-            article_vec = get_embedding(client, art["raw_html"], config)
-
-            title_sim = cosine_similarity(prompt_vec, title_vec)
-            summary_sim = cosine_similarity(prompt_vec, summary_vec)
-            reason_sim = cosine_similarity(prompt_vec, reason_vec)
-            article_sim = cosine_similarity(prompt_vec, article_vec)
-
-            if art["is_counter"]:
-                title_score = 1.0 - title_sim
-                summary_score = 1.0 - summary_sim
-                reason_score = 1.0 - reason_sim
-                article_score = 1.0 - article_sim
-            else:
-                title_score = title_sim
-                summary_score = summary_sim
-                reason_score = reason_sim
-                article_score = article_sim
-
-            row = (
-                f"{timestamp},{mail_subject},{art['index']},"
-                f"{title_score:.6f},{summary_score:.6f},{reason_score:.6f},{article_score:.6f},"
-                f"{int(art['is_counter'])}"
-            )
-            print(row)
+        # translation disabled only
+        prompt_raw, html_raw = get_prompt_and_html(
+            client,
+            config,
+            prompt_text,
+            html_text,
+            target_dir,
+            force_no_translation=True,
+        )
+        results_raw = evaluate_articles(client, config, prompt_raw, html_raw)
+        with open(output_path, "a", encoding="utf-8") as f:
+            for r in results_raw:
+                write_article_row(
+                    f,
+                    meta["timestamp"],
+                    meta.get("mail_subject", ""),
+                    r,
+                    is_translated=0,
+                )
 
 
 def eval_summary(
@@ -358,6 +412,7 @@ def eval_summary(
     output_path,
     header_only=False,
 ):
+    """Evaluate the overall prompt vs HTML and write summary results to output file."""
     if header_only:
         if output_path:
             write_header = not os.path.exists(output_path)
@@ -368,36 +423,63 @@ def eval_summary(
             print(header)
         return
 
-    # Translate prompt & HTML to English
-    if translated_files_exist(target_dir):
-        print("INFO: Using existing translated files...")
-        prompt_text_eng = load_text_file(target_dir, "prompt-eng.txt")
-        html_text_eng = load_text_file(target_dir, "report-eng.html")
-    else:
-        prompt_text_eng = translate_text_to_english(client, prompt_text, config)
-        html_text_eng = translate_html_to_english(client, html_text, config)
-        save_translated_files(target_dir, prompt_text_eng, html_text_eng)
-        save_translated_files(target_dir, prompt_text_eng, html_text_eng)
-
-    prompt_vec = get_embedding(client, prompt_text_eng, config)
-    html_vec = get_embedding(client, html_text_eng, config)
-
-    main_view_score = cosine_similarity(prompt_vec, html_vec)
-
-    timestamp = meta["timestamp"]
-    mail_subject = meta.get("mail_subject", "")
-
-    row = f"{timestamp},{mail_subject},-," f",,,{main_view_score:.6f},0"
-
-    if output_path:
-        write_header = not os.path.exists(output_path)
+    if config.get("translate_when_evaluating", True):
+        # translation enabled
+        target_prompt, target_html = get_prompt_and_html(
+            client,
+            config,
+            prompt_text,
+            html_text,
+            target_dir,
+            force_no_translation=False,
+        )
+        score = evaluate_prompt_and_html(client, config, target_prompt, target_html)
         with open(output_path, "a", encoding="utf-8") as f:
-            if write_header:
-                f.write(header + "\n")
-            f.write(row + "\n")
+            write_summary_row(
+                f,
+                meta["timestamp"],
+                meta.get("mail_subject", ""),
+                score,
+                is_translated=1,
+            )
+
+        # translation disabled
+        prompt_raw, html_raw = get_prompt_and_html(
+            client,
+            config,
+            prompt_text,
+            html_text,
+            target_dir,
+            force_no_translation=True,
+        )
+        score_raw = evaluate_prompt_and_html(client, config, prompt_raw, html_raw)
+        with open(output_path, "a", encoding="utf-8") as f:
+            write_summary_row(
+                f,
+                meta["timestamp"],
+                meta.get("mail_subject", ""),
+                score_raw,
+                is_translated=0,
+            )
     else:
-        print(header)
-        print(row)
+        # translation disabled only
+        prompt_raw, html_raw = get_prompt_and_html(
+            client,
+            config,
+            prompt_text,
+            html_text,
+            target_dir,
+            force_no_translation=True,
+        )
+        score_raw = evaluate_prompt_and_html(client, config, prompt_raw, html_raw)
+        with open(output_path, "a", encoding="utf-8") as f:
+            write_summary_row(
+                f,
+                meta["timestamp"],
+                meta.get("mail_subject", ""),
+                score_raw,
+                is_translated=0,
+            )
 
 
 def main():
