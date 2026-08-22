@@ -68,6 +68,8 @@ language_instructions_spec: |
   - Do not mix languages within a single article.
   - Maintain natural, fluent {LANG} suitable for a native reader.
 
+translate_when_evaluating: true
+
 translate_text_prompt: |
   Translate ONLY the non-English text inside the following content into natural English.
 
