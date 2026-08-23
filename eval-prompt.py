@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import json
 import yaml
 import re
@@ -266,6 +267,8 @@ def evaluate_prompt_and_html(client, config, prompt_text, html_text):
     prompt_vec = get_embedding(client, prompt_text, config)
     html_vec = get_embedding(client, html_text, config)
     main_score = cosine_similarity(prompt_vec, html_vec)
+    # Sleep briefly to avoid hitting API rate limits, especially for embedding calls
+    time.sleep(0.7)
     return main_score
 
 
@@ -299,6 +302,8 @@ def evaluate_articles(client, config, prompt_text, html_text):
                 "is_counter": art["is_counter"],
             }
         )
+        # Sleep briefly to avoid hitting API rate limits, especially for embedding calls
+        time.sleep(0.7)
     return results
 
 
@@ -360,6 +365,8 @@ def eval_per_article(
                     r,
                     is_translated=1,
                 )
+        print("INFO: Waiting TPM reset. sleeping 65 seconds...")
+        time.sleep(65)
         # translation disabled
         prompt_raw, html_raw = get_prompt_and_html(
             client,
