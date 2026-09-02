@@ -7,3 +7,5 @@ argparse
 beautifulsoup4
 pandas
 pyyaml
+sentencepiece
+huggingface-hub

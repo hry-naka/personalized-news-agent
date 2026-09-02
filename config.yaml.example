@@ -68,6 +68,10 @@ language_instructions_spec: |
   - Do not mix languages within a single article.
   - Maintain natural, fluent {LANG} suitable for a native reader.
 
+tokenizer_model_path: "tokenizer.model"
+huggingface_token: "YOUR_HUGGINGFACE_TOKEN"
+embedding_batch_size: 10
+
 translate_when_evaluating: true
 
 translate_text_prompt: |
