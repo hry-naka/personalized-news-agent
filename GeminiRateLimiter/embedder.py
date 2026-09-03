@@ -58,47 +58,9 @@ class GeminiEmbedder:
         Returns:
             List[float]: Embedding vector.
         """
-        time.sleep(1.2)  # Small delay to avoid immediate rate limit issues
         tokens_needed = self.tpm.estimate_tokens(text)
-        self.tpm.wait_if_needed(tokens_needed)
-
-        retry_count = 0
-
-        while retry_count < self.max_retries:
-            try:
-                response = self.client.models.embed_content(
-                    model=self.model, contents=text
-                )
-                vec = response.embeddings[0].values
-                self.tpm.add(tokens_needed)
-                return vec
-            except ClientError as e:
-                cause = "UNKNOWN"
-
-                try:
-                    error_json = e.response.json()
-                    details = error_json.get("error", {}).get("details", [])
-
-                    for d in details:
-                        if (
-                            d.get("@type")
-                            == "type.googleapis.com/google.rpc.QuotaFailure"
-                        ):
-                            violations = d.get("violations", [])
-                            if violations:
-                                quota_metric = violations[0].get("quotaMetric")
-                                quota_id = violations[0].get("quotaId")
-                                quota_value = violations[0].get("quotaValue")
-                                cause = f"{quota_metric} (id={quota_id}, value={quota_value})"
-                except Exception as parse_err:
-                    cause = f"PARSE_ERROR: {parse_err}"
-
-                print(f"INFO: 429 detected. Cause = {cause}")
-
-                self.retry.sleep_for_retry(e)
-                retry_count += 1
-
-        raise RuntimeError("ERROR: Maximum retry attempts exceeded.")
+        embeddings = self._embed_content(text, tokens_needed)
+        return embeddings[0]
 
     def embed_batch(self, texts: List[str]) -> List[List[float]]:
         """
@@ -110,26 +72,30 @@ class GeminiEmbedder:
         Returns:
             List[List[float]]: List of embedding vectors.
         """
-        time.sleep(1.2)  # Small delay to avoid immediate rate limit issues
         # Estimate total tokens for TPM control
         tokens_needed = sum(self.tpm.estimate_tokens(t) for t in texts)
-        self.tpm.wait_if_needed(tokens_needed)
-
-        retry_count = 0
         contents_list = [
             types.Content(parts=[types.Part.from_text(text=t)]) for t in texts
         ]
+        return self._embed_content(contents_list, tokens_needed)
+
+    def _embed_content(self, contents, tokens_needed: int) -> List[List[float]]:
+        """Embed content while applying throttling and retry handling."""
+        time.sleep(1.2)  # Small delay to avoid immediate rate limit issues
+        self.tpm.wait_if_needed(tokens_needed)
+
+        retry_count = 0
         while retry_count < self.max_retries:
             try:
                 response = self.client.models.embed_content(
-                    model=self.model, contents=contents_list
+                    model=self.model, contents=contents
                 )
                 vectors = [emb.values for emb in response.embeddings]
                 self.tpm.add(tokens_needed)
                 return vectors
-
             except ClientError as e:
                 cause = "UNKNOWN"
+                quota_id = None
 
                 try:
                     error_json = e.response.json()
@@ -148,9 +114,14 @@ class GeminiEmbedder:
                                 cause = f"{quota_metric} (id={quota_id}, value={quota_value})"
                 except Exception as parse_err:
                     cause = f"PARSE_ERROR: {parse_err}"
-
+                if quota_id and quota_id.startswith("EmbedContentRequestsPerDay"):
+                    print(
+                        "INFO: 429 detected (RPD). No point in retrying. Aborting immediately."
+                    )
+                    raise RuntimeError("ERROR: RPD quota exceeded. Try again tomorrow.")
                 print(f"INFO: 429 detected. Cause = {cause}")
 
                 self.retry.sleep_for_retry(e)
                 retry_count += 1
+
         raise RuntimeError("ERROR: Maximum retry attempts exceeded.")
