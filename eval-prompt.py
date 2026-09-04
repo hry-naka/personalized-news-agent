@@ -273,16 +273,55 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Evaluation target: 'latest' or path/to/eval-data/YYYYMMDDHHMM",
     )
-    parser.add_argument("-o", "--output", help="Append CSV output to specified file")
-    parser.add_argument("--header", action="store_true", help="Output CSV header only")
+    parser.add_argument(
+        "-o",
+        "--output",
+        required=True,
+        help="Append CSV output to specified file",
+    )
+    parser.add_argument(
+        "--header", action="store_true", help="Force CSV header fix only"
+    )
     parser.add_argument(
         "-m",
         "--mode",
         choices=["summary", "articles", "all"],
-        default="summary",
+        default="all",
         help="Evaluation mode: summary, articles, or all",
     )
     return parser.parse_args()
+
+
+def ensure_csv_header(output_path: str) -> None:
+    """
+    Ensure the output CSV file has the correct header. If the file does not exist or is empty, create it and write the header. If the file exists but the header is incorrect, overwrite it with the correct header.
+    """
+    if output_path is None:
+        return  # No output path provided, nothing to do
+
+    # if the file does not exist, create it and write the header
+    if not os.path.exists(output_path):
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(header + "\n")
+        return
+
+    # if the file exists → check its content
+    with open(output_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    # empty file → write header
+    if len(lines) == 0:
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(header + "\n")
+        return
+
+    # if the first line is not the correct header → overwrite with correct header
+    first_line = lines[0].strip()
+    if first_line != header:
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(header + "\n")
+            f.writelines(lines[1:])  # write the rest of the file after the header
+        return
 
 
 def extract_reason(art) -> str:
@@ -718,15 +757,6 @@ def main():
     Main entry point for evaluation script.
     """
     args = parse_args()
-
-    config = load_config()
-    gemini_api_key = config.get("gemini_api_key")
-    if not gemini_api_key:
-        print("ERROR: gemini_api_key missing in config.yaml")
-        sys.exit(1)
-
-    client = genai.Client(api_key=gemini_api_key)
-
     if args.input == "latest":
         target_dir = detect_latest_eval_dir()
     else:
@@ -734,6 +764,24 @@ def main():
         if not os.path.exists(target_dir):
             print(f"ERROR: Directory not found: {target_dir}")
             sys.exit(1)
+
+    if args.header:
+        ensure_csv_header(args.output)
+        print("INFO: CSV header ensured. Exiting as --header flag is set.")
+        sys.exit(0)
+    else:
+        ensure_csv_header(args.output)
+        print(
+            f"INFO: CSV header ensured for output file: {args.output} and continuing with evaluation."
+        )
+
+    config = load_config()
+
+    gemini_api_key = config.get("gemini_api_key")
+    if not gemini_api_key:
+        print("ERROR: gemini_api_key missing in config.yaml")
+        sys.exit(1)
+    client = genai.Client(api_key=gemini_api_key)
 
     meta = load_meta(target_dir)
     prompt_text = load_text_file(target_dir, meta["prompt_file"])
@@ -767,7 +815,7 @@ def main():
             meta=meta,
             target_dir=target_dir,
             output_path=args.output,
-            header_only=args.header,
+            header_only=False,
         )
     elif args.mode == "articles":
         eval_per_article(
@@ -780,7 +828,7 @@ def main():
             meta=meta,
             target_dir=target_dir,
             output_path=args.output,
-            header_only=args.header,
+            header_only=False,
         )
     elif args.mode == "all":
         eval_summary(
@@ -793,7 +841,7 @@ def main():
             meta=meta,
             target_dir=target_dir,
             output_path=args.output,
-            header_only=args.header,
+            header_only=False,
         )
         eval_per_article(
             client=client,

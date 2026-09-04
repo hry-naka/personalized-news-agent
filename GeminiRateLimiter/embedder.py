@@ -118,6 +118,8 @@ class GeminiEmbedder:
                                 quota_id = violations[0].get("quotaId")
                                 quota_value = violations[0].get("quotaValue")
                                 cause = f"{quota_metric} (id={quota_id}, value={quota_value})"
+                        else:
+                            cause = str(d)
                 except Exception as parse_err:
                     cause = f"PARSE_ERROR: {parse_err}"
                 if quota_id and quota_id.startswith("EmbedContentRequestsPerDay"):

@@ -14,5 +14,5 @@ cd $HOME/git/personalized-news-agent/
 echo "=== $(date) $1 run ===" >> $LOG
 
 .venv/bin/python ./news-agent.py "$1" --eval >> $LOG 2>&1
-.venv/bin/python ./eval-prompt.py -i latest -o $EVAL -m all >> $LOG 2>&1
+.venv/bin/python ./eval-prompt.py -i latest -o $EVAL >> $LOG 2>&1
 
