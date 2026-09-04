@@ -320,7 +320,7 @@ def ensure_csv_header(output_path: str) -> None:
     if first_line != header:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(header + "\n")
-            f.writelines(lines[1:])  # write the rest of the file after the header
+            f.writelines(lines[0:])  # write the rest of the file after the header
         return
 
 
