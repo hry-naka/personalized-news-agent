@@ -6,6 +6,12 @@ from google.genai import types
 from google.genai.errors import ClientError
 
 
+class RPDQuotaExceeded(Exception):
+    """Custom exception for RPD quota exceeded."""
+
+    pass
+
+
 class GeminiEmbedder:
     """
     Gemini Embedding wrapper with TPM control and retry handling.
@@ -118,7 +124,9 @@ class GeminiEmbedder:
                     print(
                         "INFO: 429 detected (RPD). No point in retrying. Aborting immediately."
                     )
-                    raise RuntimeError("ERROR: RPD quota exceeded. Try again tomorrow.")
+                    raise RPDQuotaExceeded(
+                        "ERROR: RPD quota exceeded. Try again tomorrow."
+                    )
                 print(f"INFO: 429 detected. Cause = {cause}")
 
                 self.retry.sleep_for_retry(e)

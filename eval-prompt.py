@@ -14,6 +14,7 @@ from GeminiRateLimiter.tpm_window import TpmWindow
 from GeminiRateLimiter.retry import RetryHandler
 from GeminiRateLimiter.batcher import BatchEmbedder
 from GeminiRateLimiter.embedder import GeminiEmbedder
+from GeminiRateLimiter.embedder import RPDQuotaExceeded
 
 # Default Embedding model
 EMBED_MODEL = "models/gemini-embedding-2"
@@ -410,9 +411,12 @@ def evaluate_prompt_and_html(embedder, prompt_text, html_text) -> float:
         prompt_text = safe_embedding_text("prompt")
     if not html_text or not html_text.strip():
         html_text = safe_embedding_text("html")
-
-    prompt_vec = embedder.embed(prompt_text)
-    html_vec = embedder.embed(html_text)
+    try:
+        prompt_vec = embedder.embed(prompt_text)
+        html_vec = embedder.embed(html_text)
+    except RPDQuotaExceeded:
+        print("INFO: RPD exceeded. Stopping evaluation for today.")
+        sys.exit(1)
     return cosine_similarity(prompt_vec, html_vec)
 
 
@@ -431,9 +435,12 @@ def evaluate_articles(embedder, batcher, prompt_text, html_text) -> List[dict]:
     """
     if not prompt_text or not prompt_text.strip():
         prompt_text = safe_embedding_text("prompt")
-
-    prompt_vec = embedder.embed(prompt_text)
-    articles = parse_articles_from_html(html_text)
+    try:
+        prompt_vec = embedder.embed(prompt_text)
+        articles = parse_articles_from_html(html_text)
+    except RPDQuotaExceeded:
+        print("INFO: RPD exceeded. Stopping evaluation for today.")
+        sys.exit(1)
 
     texts = []
     for art in articles:
@@ -443,7 +450,11 @@ def evaluate_articles(embedder, batcher, prompt_text, html_text) -> List[dict]:
         raw_html = art["raw_html"] or safe_embedding_text("article")
         texts.extend([title, summary, reason, raw_html])
 
-    vectors = batcher.embed_batches(texts, embedder.embed_batch)
+    try:
+        vectors = batcher.embed_batches(texts, embedder.embed_batch)
+    except RPDQuotaExceeded:
+        print("INFO: RPD exceeded. Stopping evaluation for today.")
+        sys.exit(1)
 
     results = []
     for i, art in enumerate(articles):
