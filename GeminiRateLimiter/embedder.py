@@ -102,6 +102,7 @@ class GeminiEmbedder:
             except ClientError as e:
                 cause = "UNKNOWN"
                 quota_id = None
+                print(f"INFO: ClientError detected. Status code = {e}")
 
                 try:
                     error_json = e.response.json()
