@@ -27,18 +27,27 @@ to_email: "destination@example.com"
 # ------------------------------------------------------------
 rss_channels:
   - query: "日本経済新聞"
+    count: 50
+  - query: "NHKニュース"
+    count: 20
+  - query: "読売新聞"
     count: 10
-  - query: "ニュース"
+  - query: "朝日新聞"
     count: 10
-  - query: "音楽"
+  - query: "Reuters"
+    count: 50
+  - query: "AP News"
+    count: 20
+  - query: "BBC News"
     count: 10
-  - query: "アート"
+  - query: "The Guardian"
     count: 10
 
 # ------------------------------------------------------------
 # Number of curated articles to output
 # ------------------------------------------------------------
-num_output_articles: "5-10"
+num_output_articles: "20"
+num_counter_articles: "2"
 
 # ------------------------------------------------------------
 # Language Control
@@ -72,7 +81,7 @@ tokenizer_model_path: "tokenizer.model"
 huggingface_token: "YOUR_HUGGINGFACE_TOKEN"
 embedding_batch_size: 10
 
-translate_when_evaluating: true
+translate_when_evaluating: false
 
 translate_text_prompt: |
   Translate ONLY the non-English text inside the following content into natural English.

@@ -39,7 +39,7 @@ To stimulate the user’s intellectual curiosity and encourage multi‑perspecti
 Selection Criteria:  
 Choose high‑quality essays or news articles that relate to the user’s interest areas (technology, social structures, culture, etc.) but present a **different approach**, **opposing ideology**, or **contrarian viewpoint**.
 
-Among the selected articles, include **1–2 counter‑view articles**.
+Among the selected articles, include **{num_counter_articles} counter‑view articles**.
 
 Output Instructions:  
 Place all counter‑view articles **at the end** of the output.  

@@ -335,12 +335,13 @@ def main():
     for i, article in enumerate(all_articles, 1):
         articles_text += f"\n[Article No.{i}]\n"
         articles_text += f"Title: {article['title']}\n"
-        articles_text += f"Source: {article['source']}\n"
+        #    articles_text += f"Source: {article['source']}\n"
         articles_text += f"URL: {article['url']}\n"
         articles_text += "---------------------\n"
 
     # get the number of articles to output from config.yaml (default is 5)
     num_output_articles = config_data.get("num_output_articles", "5")
+    num_counter_articles = config_data.get("num_counter_articles", "1")
 
     # 5. Construct Main Prompt
     final_prompt = (
@@ -351,7 +352,9 @@ def main():
             generate_language_instructions(config_data.get("curate_language", "same")),
         )
         .replace("{num_output_articles}", str(num_output_articles))
+        .replace("{num_counter_articles}", str(num_counter_articles))
     )
+
     # 6. Call Gemini API
     print(
         f"INFO: Analyzing and curating articles with {config_data.get('gemini_llm_model', 'gemini-3.5-flash-lite')}..."
