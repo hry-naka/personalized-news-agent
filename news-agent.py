@@ -20,27 +20,14 @@ PROFILE_PATH = "user_profile.txt"
 PROMPT_PATH = "main_prompt.txt"
 
 
-def generate_language_instructions(curate_language):
+def generate_language_instructions(config):
     """Generate language instructions based on the 'curate_language' setting."""
-
-    language_instructions_same = (
-        "\nWrite the [Reason] and [Summary] in the same language as the original article.\n"
-        "- If the article title and content are in Japanese, write the output in Japanese.\n"
-        "- If the article is in English, write the output in English.\n"
-        "- Do not mix languages within a single article.\n"
-    )
-
-    language_instructions_spec = (
-        "\nWrite the [Reason] and [Summary] in {LANG}, regardless of the article’s original language.\n"
-        "- Even if the article is written in Japanese or another language, translate its content and write the output in {LANG}.\n"
-        "- Do not mix languages within a single article.\n"
-        "- Maintain natural, fluent {LANG} suitable for a native reader.\n"
-    )
+    curate_language = config.get("curate_language", "same")
 
     if curate_language == "same":
-        return language_instructions_same
+        return config.get("language_instructions_same", "")
     else:
-        return language_instructions_spec.replace(
+        return config.get("language_instructions_spec", "").replace(
             "{LANG}", curate_language.capitalize()
         )
 
@@ -100,7 +87,7 @@ def get_real_url(news_url):
         return news_url
 
 
-def fetch_news_from_rss(search_query, max_count):
+def fetch_news_from_rss(name, search_query, max_count):
     """Fetch and parse articles from Bing News RSS based on query."""
     encoded_query = urllib.parse.quote(search_query)
     rss_url = f"https://www.bing.com/news/search?q={encoded_query}&format=rss"
@@ -108,15 +95,20 @@ def fetch_news_from_rss(search_query, max_count):
         f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
         f"INFO: Fetching RSS news for query: '{search_query}' (Max: {max_count})..."
     )
+    return fetch_news_from_rss_url(name, rss_url, max_count)
 
+
+def fetch_news_from_rss_url(name, url, max_count):
+    """Fetch and parse articles from a given RSS URL."""
+    print(f"INFO: Fetching RSS news from URL: '{url}' (Max: {max_count})...")
     try:
-        feed = feedparser.parse(rss_url)
+        feed = feedparser.parse(url)
         articles = []
         for entry in feed.entries[:max_count]:
             full_title = entry.title
             encrypted_url = entry.link
             title = full_title
-            source = "unknown"
+            source = name
 
             if " - " in full_title:
                 parts = full_title.rsplit(" - ", 1)
@@ -124,13 +116,12 @@ def fetch_news_from_rss(search_query, max_count):
                 source = parts[1].strip()
 
             real_url = get_real_url(encrypted_url)
-            # time.sleep(0.3)  # To avoid overwhelming the server
             articles.append({"title": title, "source": source, "url": real_url})
         return articles
     except Exception as e:
         print(
             f"[{DT.now().strftime('%Y-%m-%d %H:%M:%S')}]"
-            f"ERROR: Failed to parse RSS feed for '{search_query}': {e}"
+            f"ERROR: Failed to parse RSS feed from '{url}': {e}"
         )
         return []
 
@@ -313,9 +304,14 @@ def main():
     all_articles = []
     for channel in rss_channels:
         query = channel.get("query")
+        url = channel.get("url")
+        name = channel.get("name", "unknown")
         count = channel.get("count", 30)
         if query:
-            articles = fetch_news_from_rss(query, count)
+            articles = fetch_news_from_rss(name, query, count)
+            all_articles.extend(articles)
+        elif url:
+            articles = fetch_news_from_rss_url(name, url, count)
             all_articles.extend(articles)
 
     if not all_articles:
@@ -335,7 +331,7 @@ def main():
     for i, article in enumerate(all_articles, 1):
         articles_text += f"\n[Article No.{i}]\n"
         articles_text += f"Title: {article['title']}\n"
-        #    articles_text += f"Source: {article['source']}\n"
+        articles_text += f"Source: {article['source']}\n"
         articles_text += f"URL: {article['url']}\n"
         articles_text += "---------------------\n"
 
@@ -349,7 +345,7 @@ def main():
         .replace("{articles_text}", articles_text)
         .replace(
             "{language_instructions}",
-            generate_language_instructions(config_data.get("curate_language", "same")),
+            generate_language_instructions(config_data),
         )
         .replace("{num_output_articles}", str(num_output_articles))
         .replace("{num_counter_articles}", str(num_counter_articles))

@@ -24,6 +24,8 @@ Follow the structure below **exactly**:
 <article>
 <a href="URL" target="_blank" style="font-weight: bold; text-decoration: underline;">Article Title</a><br>
 <br>
+[Source] Insert the article’s source name exactly as provided in the input (e.g., "The Guardian", "BBC News"). <br>
+<br>
 [Reason] Write a single sentence explaining why this article was selected for this user.<br>
 <br>
 [Summary] Provide a deep, analyst‑level summary (2–3 sentences) that captures the essential insight of the article.<br>
@@ -50,6 +52,8 @@ Follow the structure below **exactly**:
 
 <article data-view-type="counter">
 <a href="URL" target="_blank" style="font-weight: bold; text-decoration: underline;">[Counter‑View] Article Title</a><br>
+<br>
+[Source] Insert the article’s source name exactly as provided in the input (e.g., "The Guardian", "BBC News"). <br>
 <br>
 [Reason] Write a single sentence explaining why this article was selected for this user.<br>
 <br>
