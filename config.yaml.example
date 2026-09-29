@@ -3,9 +3,20 @@
 # ============================================================
 
 # ------------------------------------------------------------
+# Secret provider configuration
+# ------------------------------------------------------------
+secret_provider:
+  type: auto
+
+gcp:
+  project_id: ""
+
+# ------------------------------------------------------------
 # Gemini API Settings
 # ------------------------------------------------------------
-gemini_api_key: "YOUR_GEMINI_API_KEY"
+# Secret values are read from GCP Secret Manager, .env, or config.yaml.
+# The legacy config keys below are kept for backward compatibility only.
+gemini_api_key: ""
 gemini_llm_model: "gemini-2.5-flash"
 #gemini_llm_model: "gemini-3.8-flash"
 gemini_embedding_model: "models/gemini-embedding-2"
@@ -16,7 +27,7 @@ gemini_embedding_model: "models/gemini-embedding-2"
 smtp_server: "127.0.0.1"
 smtp_port: 587
 smtp_user: "your_email@example.com"
-smtp_pass: "your_password"
+smtp_pass: ""
 to_email: "destination@example.com"
 
 # ------------------------------------------------------------
@@ -87,7 +98,7 @@ language_instructions_spec: |
   - Maintain natural, fluent {LANG} suitable for a native reader.
 
 tokenizer_model_path: "tokenizer.model"
-huggingface_token: "YOUR_HUGGINGFACE_TOKEN"
+huggingface_token: ""
 embedding_batch_size: 10
 
 translate_when_evaluating: false

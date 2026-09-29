@@ -14,6 +14,8 @@ from datetime import datetime as DT
 from google import genai
 from dotenv import load_dotenv
 
+from secret_manager import get_secret
+
 # File path constants
 CONFIG_PATH = "config.yaml"
 PROFILE_PATH = "user_profile.txt"
@@ -54,7 +56,11 @@ def load_external_files():
         sys.exit(1)
 
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        config_data = yaml.safe_load(f)
+        config_data = yaml.safe_load(f) or {}
+
+    config_data["gemini_api_key"] = get_secret("gemini_api_key")
+    config_data["smtp_pass"] = get_secret("smtp_pass")
+    config_data["huggingface_token"] = get_secret("huggingface_token")
 
     with open(PROFILE_PATH, "r", encoding="utf-8") as f:
         user_profile = f.read()
@@ -188,7 +194,7 @@ def call_gemini_with_long_backoff(final_prompt, config, max_retries=3):
     else:
         wait_schedule = config.get("retry_wait_seconds", [300, 600, 900])
 
-    client = genai.Client(api_key=config.get("gemini_api_key"))
+    client = genai.Client(api_key=get_secret("gemini_api_key"))
 
     for attempt in range(max_retries):
 

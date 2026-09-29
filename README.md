@@ -1,367 +1,308 @@
 # Personalized News Agent
 
-A Python-based automated news curation system that fetches articles from RSS feeds, analyzes them using the Gemini API, generates a personalized HTML news digest based on a user profile, and optionally stores evaluation data for later analysis.  
-This project is designed for daily automated execution (cron) and includes a full evaluation pipeline for measuring how well the curated articles match the user’s interests.
+This project fetches RSS news, ranks and curates articles with Gemini, and sends a personalized digest by email. It also includes an evaluation pipeline for prompt and article quality measurement.
 
----
+## Features
 
-# Features
+- RSS article aggregation from multiple feeds configured in `config.yaml`
+- Gemini-based article selection and summarization
+- HTML report generation via `main_prompt.txt`
+- SMTP delivery for the final digest
+- Optional `--eval` output for reproducibility and review
+- Secret management with `auto`, `gcp`, `env`, and `config` provider modes
 
-### RSS & Article Processing
-- Fetches news articles from multiple RSS channels defined in `config.yaml`
-- Resolves redirect URLs to obtain the final article URL
-- Normalizes article metadata for consistent downstream processing
-
-### Gemini‑Based Analysis & Curation
-- Uses Gemini 2.5 to:
-  - Analyze the user profile
-  - Select the most relevant articles
-  - Generate a structured HTML news digest
-  - Include counter‑view articles to encourage intellectual diversity
-
-### Email Delivery
-- Sends the curated HTML report via SMTP (Gmail, SendGrid, Postfix, etc.)
-
-### Evaluation & Reproducibility
-- Optional evaluation mode (`--eval`) stores:
-  - The exact prompt used
-  - The generated HTML
-  - The raw RSS article list
-  - Metadata for reproducibility
-- Fully compatible with the standalone evaluation tools:
-  - `eval-prompt.py` (embedding-based quantitative evaluation)
-  - `create-laaj-prompt.py` (LLM-as-a-Judge qualitative evaluation)
-  - `summarize-eval.py` (statistical aggregation)
-
-### Automation‑Friendly
-- Designed for daily automated execution via cron or systemd
-- Deterministic within a single run; evaluation data helps track consistency
-
----
-
-# Requirements
+## Requirements
 
 - Python 3.12+
-- A valid Gemini API key
-- An SMTP server (Gmail, SendGrid, local Postfix, etc.)
-- macOS, Linux (Ubuntu recommended), or WSL2
+- A Gemini API key
+- An SMTP account/server
+- Optional: Google Cloud Project + Secret Manager for `gcp` mode (`pip install google-cloud-secret-manager`)
+- macOS, Linux, or WSL2
 
----
+## Installation
 
-# Installation
-
-Clone the repository:
-```
+```bash
 git clone https://github.com/hry-naka/personalized-news-agent.git
 cd personalized-news-agent
-```
-Install dependencies:
-```
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
 ---
 
-# Configuration
+## Secret management
 
-All configuration is now unified under **config.yaml**.  
-`.env` is no longer required. 
+This project supports secret resolution in the following priority order when `secret_provider.type: auto` is used:
 
-### 1. `config.yaml`
+1. GCP Secret Manager
+2. `.env`
+3. `config.yaml`
 
-The agent loads configuration from `config.yaml` directly. The actual schema currently used by the code is as follows:
+The app also keeps backward compatibility with the legacy keys in `config.yaml`:
+
+- `gemini_api_key`
+- `smtp_pass`
+- `huggingface_token`
+
+When a secret is loaded from `config.yaml`, the code logs a warning to encourage migration.
+
+### `secret_provider` configuration
 
 ```yaml
-# ============================================================
-# AI News Agent Configuration (YAML Version)
-# ============================================================
+secret_provider:
+  type: auto
+```
 
-# ------------------------------------------------------------
-# Gemini API Settings
-# ------------------------------------------------------------
-gemini_api_key: "YOUR_GEMINI_API_KEY"
-#gemini_llm_model: "gemini-2.5-flash"
-gemini_llm_model: "gemini-3.5-flash-lite"
-#gemini_llm_model: "gemini-3.7-flash"
+Valid values:
+
+- `auto`
+- `gcp`
+- `env`
+- `config`
+
+### `auto` mode
+
+```yaml
+secret_provider:
+  type: auto
+```
+
+Resolved order:
+
+1. GCP Secret Manager
+2. `.env`
+3. `config.yaml`
+
+If none of the sources provide the value, the program exits with an explicit error.
+
+### `gcp` mode
+
+Use this when you want to read from Google Cloud Secret Manager only.
+
+```yaml
+secret_provider:
+  type: gcp
+```
+
+Expected secret names:
+
+- `gemini_api_key`
+- `smtp_pass`
+- `huggingface_token`
+
+The code uses Application Default Credentials (ADC). Ensure the environment is authenticated before running the agent.
+
+Example:
+
+```bash
+gcloud auth application-default login
+export GOOGLE_CLOUD_PROJECT=your-project-id
+```
+
+### `env` mode
+
+Use this when you want to load from a `.env` file only.
+
+```yaml
+secret_provider:
+  type: env
+```
+
+The keys must be defined as environment variables, normally via `.env`:
+
+```env
+GEMINI_API_KEY=...
+SMTP_PASS=...
+HUGGINGFACE_TOKEN=...
+```
+
+The project uses `python-dotenv` and calls `load_dotenv()` automatically.
+
+### `config` mode
+
+Use this only for compatibility or local test setups.
+
+```yaml
+secret_provider:
+  type: config
+```
+
+This resolves from `config.yaml` directly, but emits a warning because it is a legacy path.
+
+---
+
+## Configuration
+
+### `config.yaml.example`
+
+Use [config.yaml.example](config.yaml.example) as the template. It intentionally omits real secrets and includes the new `secret_provider` section.
+
+### `.env.example`
+
+Create a local `.env` from [.env.example](.env.example) and keep it outside of source control.
+
+```env
+GEMINI_API_KEY=your_gemini_key
+SMTP_PASS=your_smtp_password
+HUGGINGFACE_TOKEN=your_huggingface_token
+```
+
+### Example `config.yaml`
+
+```yaml
+secret_provider:
+  type: auto
+
+gemini_llm_model: "gemini-2.5-flash"
 gemini_embedding_model: "models/gemini-embedding-2"
 
-# Translation prompts used by eval-prompt.py when non-ASCII text is detected.
-translate_text_prompt: |
-  Translate the following text into English.
-  Preserve the meaning and tone, and return only the translated text.
-
-translate_html_prompt: |
-  Translate all visible text in the following HTML into English.
-  Preserve the structure and formatting as much as possible.
-  Return only the translated HTML.
-
-# ------------------------------------------------------------
-# Email (SMTP) Settings
-# ------------------------------------------------------------
 smtp_server: "127.0.0.1"
 smtp_port: 587
 smtp_user: "your_email@example.com"
-smtp_pass: "your_password"
+# legacy supported for backward compatibility
+smtp_pass: ""
 to_email: "destination@example.com"
 
-# ------------------------------------------------------------
-# RSS Channels
-# - query: Bing News RSS search query
-# - count: number of articles to fetch
-# ------------------------------------------------------------
 rss_channels:
-  - query: "日本経済新聞"
-    count: 10
-  - query: "ニュース"
-    count: 10
-  - query: "音楽"
-    count: 10
-  - query: "アート"
-    count: 10
+  - name: "日本経済新聞"
+    query: "日本経済新聞"
+    count: 20
 
-# ------------------------------------------------------------
-# Number of curated articles to output
-# ------------------------------------------------------------
-num_output_articles: "5-10"
-
-# ------------------------------------------------------------
-# Language Control
-# - same: follow article language
-# - japanese: force Japanese output
-# - english: force English output
-# - any other string: used as {LANG} in instructions_spec
-# ------------------------------------------------------------
+num_output_articles: "10"
+num_counter_articles: "2"
 curate_language: "same"
 
-# ------------------------------------------------------------
-# Language Instructions (for curate_language = "same")
-# ------------------------------------------------------------
 language_instructions_same: |
   Write the [Reason] and [Summary] in the same language as the original article.
-  - If the article title and content are in Japanese, write the output in Japanese.
-  - If the article is in English, write the output in English.
-  - Do not mix languages within a single article.
 
-# ------------------------------------------------------------
-# Language Instructions (for curate_language != "same")
-# {LANG} will be replaced by Python code
-# ------------------------------------------------------------
-language_instructions_spec: |
-  Write the [Reason] and [Summary] in {LANG}, regardless of the article’s original language.
-  - Even if the article is written in Japanese or another language, translate its content and write the output in {LANG}.
-  - Do not mix languages within a single article.
-  - Maintain natural, fluent {LANG} suitable for a native reader.
-
-# ------------------------------------------------------------
-# Retry / Debug Settings
-# ------------------------------------------------------------
-retry_wait_seconds:
-  - 300   # 5 minutes
-  - 600   # 10 minutes
-  - 900   # 15 minutes
-
-# Debug mode (optional)
-force_error_status_test: false
-force_error_status_code: 503
-retry_wait_seconds_debug:
-  - 5
-  - 10
-  - 15
+tokenizer_model_path: "tokenizer.model"
+huggingface_token: ""
 ```
 
-Key notes:
-- `gemini_llm_model` controls the news-curation model used by `news-agent.py`.
-- `gemini_embedding_model` controls the embedding model used by `eval-prompt.py`.
-- `translate_text_prompt` and `translate_html_prompt` are optional override strings used by `eval-prompt.py` when non-ASCII content is translated to English; if omitted, the code falls back to the default behavior.
-- `retry_wait_seconds` and `retry_wait_seconds_debug` are used by `call_gemini_with_long_backoff()` for API retry backoff.
+> The legacy YAML keys remain supported for compatibility, but they are not the preferred storage location.
 
-### 2. `user_profile.txt`
-Defines the user’s interests, preferences, and intellectual tendencies.
-This profile is injected directly into the main prompt and strongly influences article selection.
-
-### 3. `main_prompt.txt`
-Defines the HTML output structure and selection rules.
-The script replaces:
-
-```
-{user_profile}
-{articles_text}
-{language_instructions}
-{num_output_articles}
-```
 ---
-# Usage
-If you do not need evaluation data, simply run the agent:
+
+## GCP Secret Manager setup
+
+1. Enable Secret Manager for your project (Refer to https://docs.cloud.google.com/secret-manager/docs/reference/libraries#client-libraries-install-python).
+2. Create secrets with the same names:
+   - `gemini_api_key`
+   - `smtp_pass`
+   - `huggingface_token`
+3. Grant the service account or your local ADC identity permission to access them.
+4. Set the project ID:
+
+```bash
+export GOOGLE_CLOUD_PROJECT=your-project-id
 ```
+
+5. Configure:
+
+```yaml
+secret_provider:
+  type: gcp
+```
+
+---
+
+## `.env` setup
+
+Create a `.env` file in the project root:
+
+```env
+GEMINI_API_KEY=your_gemini_key
+SMTP_PASS=your_smtp_password
+HUGGINGFACE_TOKEN=your_huggingface_token
+```
+
+Then configure:
+
+```yaml
+secret_provider:
+  type: env
+```
+
+The app loads `.env` automatically via `python-dotenv`.
+
+---
+
+## Usage
+
+Run the agent with the default secret resolution order:
+
+```bash
 python news-agent.py "Daily News Digest"
 ```
-This sends a curated email with the subject:
-```
-【AI news Agent】: Daily News Digest insights report
-```
 
-To store evaluation data:
-```
+With evaluation data output:
+
+```bash
 python news-agent.py "Debug Run" --eval
 ```
 
-This sends curated email and creates:
-```
-eval-data/YYYYMMDDHHMM/
- ├── prompt.txt
- ├── report.html
- ├── articles.json
- └── meta.json
-```
-
----
-# Evaluation Pipeline (Optional)
-
-The project includes a complete evaluation pipeline combining:
-* Embedding-based quantitative evaluation
-* LLM-as-a-Judge qualitative evaluation
-* Statistical aggregation across multiple LLMs
-
-This allows you to measure:
-* How well the digest matches the user profile
-* How consistent the agent is over time
-* How different LLMs judge the quality of the generated digest
-
-### 1. Agent-Side Quantitative Evaluation (`eval-prompt.py`)
-
-This tool evaluates:
-* Titles
-* Summaries
-* Selection reasons
-* Full article blocks
-* Counter-view articles (inverted scoring)
-
-All scores are cosine similarities between:
-* The full prompt text
-* Each component of the generated HTML digest
-
-Run evaluation:
-```
-python eval-prompt.py -i latest -m all -o eval-data/eval-prompt.csv
-```
-
-Output CSV columns:
-
-| column | description |
-| ------ | ------------|
-|timestamp|Evaluation timestamp|
-|mail_subject|Subject used when generating the digest|
-|article_index|- for summary row, otherwise article index|
-|title_score|Similarity between prompt and article title|
-|summary_score|Similarity between prompt and article summary|
-|reason_score|Similarity between prompt and selection reason|
-|article_score|Similarity between prompt and full article block|
-|is_counter|1 for counter-view articles|
-
 ---
 
-### 2. LLM-as-a-Judge Evaluation (`create-laaj-prompt.py`)
+## Evaluation
 
-Embedding similarity alone cannot evaluate:
-* Article selection quality
-* Summary clarity
-* HTML correctness
-* Reasoning consistency
-* Overall alignment with user interests
+The repo includes the evaluation tools:
 
-For this, the project supports LLM-as-a-Judge evaluation.
+- `eval-prompt.py` for embedding-based quantitative evaluation (`-i` and `-o` are required)
+- `create-laaj-prompt.py` for LLM-as-a-Judge prompt generation
+- `summarize-eval.py` for aggregation
 
-#### 2.1 Generate judge prompt:
-```
-python create-laaj-prompt.py -i eval-data/YYYYMMDDHHMM/ -o judge-prompt.txt
-```
+`eval-prompt.py` uses the configured secret provider for the Gemini and Hugging Face credentials. The prompt-generation and CSV-summary scripts do not call external APIs and do not require secrets.
 
-This prompt includes:
-* User profile
-* Generated HTML digest
-* Original RSS article list
-* Evaluation criteria (7 metrics)
+Example evaluation commands, after a run has produced evaluation data:
 
-#### 2.2 Evaluate using multiple LLMs
-
-Feed judge-prompt.txt into:
-* Claude
-* Gemini
-* GPT
-* Copilot
-
-Each LLM outputs a CSV:
-```csv
-model,metric,score,reason
-Claude,article_selection,3.5,"..."
-Claude,summary_quality,3.5,"..."
+```bash
+python eval-prompt.py -i latest -o eval-data/eval-prompt.csv -m all
+python create-laaj-prompt.py -i latest -o laaj-results
+python summarize-eval.py -i eval-data/eval-prompt.csv -f 202609010000 -t 202609302359 -o summarized-eval.csv
 ```
 
-Store these files under:
-judge-results/YYYYMMDD/
+The `--eval` option is intended to save `prompt.txt`, `report.html`, `articles.json`, and `meta.json` under a timestamped directory in `eval-data/`. Since the current `news-agent.py` exits before generation, it cannot create these files until the blocker above is fixed.
 
----
-### 3. Statistical Aggregation (`summarize-eval.py`)
+Run the available secret-provider unit tests with:
 
-This tool combines:
-* Agent-side embedding scores
-* Judge-side LLM scores
-
-Run aggregation:
-```
-python summarize-eval.py \
-    --input eval-data/eval-prompt.csv \
-    --from 202607151549 \
-    --to   202607161508 \
-    --llm-as-a-judge \
-    --judge-dir judge-results/20260718 \
-    --output summary.csv
-```
-Output structure:
-First block: agent metrics (mean, median, stdev, count)
-Blank line
-Second block: judge metrics (LLM-averaged mean, median, stdev, count)
-
-Example:
-```csv
-digest_score,0.7707,0.7707,0.0137,2
-title_score,0.4887,0.5060,0.0513,10
-...
-
-article_selection,4.10,3.8,0.64,3
-summary_quality,3.96,3.5,0.73,3
-...
-```
-
-This provides a unified quantitative + qualitative evaluation of the agent’s performance.
-
----
-
-# Automation (Ubuntu / macOS)
-
-`run-news.sh` runs news-agent.py with `--eval` and eval-prompt.py sequentially. If you want to run news-agent.py only, edit this `run-news.sh`.
-The single argument passed to run-news.sh is forwarded to news-agent.py as the mail_subject.
-
-Example cron entry:
-```
-0 7 * * * /path/to/run-news.sh "Morning Digest"
+```bash
+python -m unittest discover -s tests
 ```
 
 ---
 
-# Project Structure
+## Notes on backward compatibility
 
+The legacy fields below are still accepted:
+
+```yaml
+gemini_api_key: "..."
+smtp_pass: "..."
+huggingface_token: "..."
 ```
+
+However, the code now treats them as a fallback source. When values originate from config, a warning is printed to indicate the recommended migration path.
+
+---
+
+## Project structure
+
+```text
 personalized-news-agent/
- ├── news-agent.py
- ├── eval-prompt.py
- ├── create-laaj-prompt.py
- ├── summarize-eval.py
- ├── main_prompt.txt
- ├── user_profile.txt
- ├── config.yaml
- ├── requirements.txt
- ├── run-news.sh
- ├── eval-data/
- ├── judge-results/
- └── README.md
+├── news-agent.py
+├── eval-prompt.py
+├── secret_manager.py
+├── config.yaml
+├── config.yaml.example
+├── .env.example
+├── main_prompt.txt
+├── user_profile.txt
+├── requirements.txt
+├── README.md
+├── tests/
+├── eval-data/
+├── laaj-results/
+├── GeminiRateLimiter/
+└── run-news.sh
 ```

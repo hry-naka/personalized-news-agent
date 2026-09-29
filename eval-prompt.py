@@ -15,6 +15,7 @@ from GeminiRateLimiter.retry import RetryHandler
 from GeminiRateLimiter.batcher import BatchEmbedder
 from GeminiRateLimiter.embedder import GeminiEmbedder
 from GeminiRateLimiter.embedder import RPDQuotaExceeded
+from secret_manager import get_secret
 
 # Default Embedding model
 EMBED_MODEL = "models/gemini-embedding-2"
@@ -777,9 +778,10 @@ def main():
 
     config = load_config()
 
-    gemini_api_key = config.get("gemini_api_key")
-    if not gemini_api_key:
-        print("ERROR: gemini_api_key missing in config.yaml")
+    try:
+        gemini_api_key = get_secret("gemini_api_key")
+    except Exception as exc:
+        print(f"ERROR: {exc}")
         sys.exit(1)
     client = genai.Client(api_key=gemini_api_key)
 
@@ -789,7 +791,11 @@ def main():
     articles_list = load_json_file(target_dir, meta["articles_file"])
 
     tokenizer_model_path = config.get("tokenizer_model_path")
-    token = config.get("huggingface_token")
+    try:
+        token = get_secret("huggingface_token")
+    except Exception as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
     tpm = TpmWindow(tokenizer_model_path=tokenizer_model_path, token=token, limit=25000)
     retry = RetryHandler(default_sleep=60, verbose=True)
     embed_model = config.get("gemini_embedding_model", EMBED_MODEL)
